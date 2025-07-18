@@ -488,7 +488,7 @@ def main():
     st.dataframe(df_rnav)
 
     st.subheader("RNAV (Total Discounted Cash Flow)")
-    st.write(df_rnav.loc["Total", "Discounted Cash Flow"])
+    st.write(f"{df_rnav.loc['Total', 'Discounted Cash Flow']:,.0f} VND")
 
     st.header("Cash Flow Chart")
     st.line_chart(df_rnav[["Net Cash Flow", "Discounted Cash Flow"]].drop("Total", errors="ignore"))
