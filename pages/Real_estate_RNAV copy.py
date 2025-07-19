@@ -453,59 +453,83 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     Returns a dict with keys: image_url, basic_info, asp, nsa, gfa, construction_cost_per_sqm, land_area, land_cost_per_sqm
     """
     prompt = (
-        f"First, provide a brief summary of the real estate project named '{project_name}' (location, type, notable features). "
-        "Second, find the average selling price (ASP) of the project. If there is no primary ASP, use the secondary ASP. "
-        "If the ASP is a range, calculate and return the mean of the range. "
-        "Return only the mean value as a number (no units, no commas) for the ASP. "
-        "Format your answer as:\n"
-        "Info: <basic_info>\n"
-        "Average Selling Price: <asp>\n"
-        "Net Sellable Area: <nsa>\n"
-        "Gross Floor Area: <gfa>\n"
-        "Construction Cost per sqm: <construction_cost>\n"
-        "Land Area: <land_area>\n"
-        "Land Cost per sqm: <land_cost>\n"
-        "Image: <image_url>\n"
+        f"You are a real estate analyst. Please research the real estate project named '{project_name}' and provide the following information:\n\n"
+        f"1. Brief summary of the project (location, type, developer, notable features)\n"
+        f"2. Key project parameters if available\n\n"
+        f"Please format your response EXACTLY as follows (use 'N/A' if information is not available):\n\n"
+        f"Info: [Brief project description including location, type, and developer]\n"
+        f"Average Selling Price: [Number only, no commas, no currency - e.g., 50000000]\n"
+        f"Net Sellable Area: [Number only, no commas - e.g., 100000]\n"
+        f"Gross Floor Area: [Number only, no commas - e.g., 150000]\n"
+        f"Construction Cost per sqm: [Number only, no commas - e.g., 15000000]\n"
+        f"Land Area: [Number only, no commas - e.g., 50000]\n"
+        f"Land Cost per sqm: [Number only, no commas - e.g., 25000000]\n"
+        f"Image: [Image URL if available, otherwise 'N/A']\n\n"
+        f"If you cannot find specific information about '{project_name}', please provide typical values for similar projects in Vietnam and indicate they are estimates."
     )
-    try:
-        # Pass api_key explicitly as required by openai.OpenAI
-        client = openai.OpenAI(api_key=openai_api_key)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
-            temperature=0.7,
-        )
-        content = response.choices[0].message.content.strip()
-        # Parse the response
-        result = {
-            "image_url": "",
-            "basic_info": "",
-            "asp": "",
-            "nsa": "",
-            "gfa": "",
-            "construction_cost_per_sqm": "",
-            "land_area": "",
-            "land_cost_per_sqm": "",
-            "raw_content": content  # <-- Add this line
-        }
-        patterns = {
-            "basic_info": r"Info:\s*(.*)",
-            "asp": r"Average Selling Price:\s*([0-9\.]+)",
-            "nsa": r"Net Sellable Area:\s*([0-9,\.]+)",
-            "gfa": r"Gross Floor Area:\s*([0-9,\.]+)",
-            "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+)",
-            "land_area": r"Land Area:\s*([0-9,\.]+)",
-            "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
-            "image_url": r"Image:\s*(.*)"
-        }
-        for key, pat in patterns.items():
-            m = re.search(pat, content)
-            if m:
-                result[key] = m.group(1).strip()
-        return result
-    except Exception as e:
-        return {"error": f"Error fetching project info: {e}"}
+    
+    # Try multiple models in order of preference
+    models_to_try = ["gpt-4", "gpt-3.5-turbo", "gpt-4o"]
+    
+    for model in models_to_try:
+        try:
+            # Pass api_key explicitly as required by openai.OpenAI
+            client = openai.OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful real estate analyst with access to current market information."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,  # Increased token limit
+                temperature=0.3,  # Lower temperature for more consistent formatting
+            )
+            content = response.choices[0].message.content.strip()
+            break  # If successful, break out of the loop
+            
+        except Exception as model_error:
+            if model == models_to_try[-1]:  # If this is the last model to try
+                return {"error": f"All models failed. Last error: {str(model_error)}"}
+            continue  # Try the next model
+    
+    # Parse the response
+    
+    # Parse the response
+    result = {
+        "image_url": "",
+        "basic_info": "",
+        "asp": "",
+        "nsa": "",
+        "gfa": "",
+        "construction_cost_per_sqm": "",
+        "land_area": "",
+        "land_cost_per_sqm": "",
+        "raw_content": content,
+        "model_used": model  # Track which model was used
+    }
+    
+    # Improved regex patterns to handle variations
+    patterns = {
+        "basic_info": r"Info:\s*(.*?)(?:\n|$)",
+        "asp": r"Average Selling Price:\s*([0-9,\.]+|N/A)",
+        "nsa": r"Net Sellable Area:\s*([0-9,\.]+|N/A)",
+        "gfa": r"Gross Floor Area:\s*([0-9,\.]+|N/A)",
+        "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+|N/A)",
+        "land_area": r"Land Area:\s*([0-9,\.]+|N/A)",
+        "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+|N/A)",
+        "image_url": r"Image:\s*(.*?)(?:\n|$)"
+    }
+    
+    for key, pat in patterns.items():
+        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE)
+        if m:
+            value = m.group(1).strip()
+            # Clean up numeric values
+            if key != "basic_info" and key != "image_url" and value != "N/A":
+                value = value.replace(",", "")
+            result[key] = value
+    
+    return result
 
 def main():
     st.title("Real Estate RNAV Calculator")
@@ -529,18 +553,35 @@ def main():
             with st.spinner("Querying ChatGPT..."):
                 info = get_project_basic_info(project_name, api_key)
                 st.session_state["project_info"] = info
-                # Save the raw response if available
-                if isinstance(info, dict) and "error" not in info and hasattr(info, "raw_content"):
-                    st.session_state["project_info_raw"] = info["raw_content"]
-                elif isinstance(info, dict) and "raw_content" in info:
-                    st.session_state["project_info_raw"] = info["raw_content"]
-                elif isinstance(info, dict) and "error" not in info and "raw" in info:
-                    st.session_state["project_info_raw"] = info["raw"]
-                else:
-                    # fallback: try to get the raw content from the last OpenAI call
-                    st.session_state["project_info_raw"] = info.get("raw_content", "")
+                
+                # Show debugging info
+                if isinstance(info, dict):
+                    if "error" in info:
+                        st.error(f"❌ Error: {info['error']}")
+                    elif "model_used" in info:
+                        st.success(f"✅ Successfully used model: {info['model_used']}")
+                    
+                    # Save the raw response if available
+                    if "raw_content" in info:
+                        st.session_state["project_info_raw"] = info["raw_content"]
+                    else:
+                        st.session_state["project_info_raw"] = str(info)
     else:
         st.info("💡 ChatGPT integration is disabled. Please set up your OpenAI API key to use this feature.")
+
+    # Add debug section
+    if api_key and st.checkbox("🔧 Debug Mode"):
+        st.subheader("🔍 API Debug Information")
+        
+        if st.button("Test OpenAI Connection"):
+            test_result = test_openai_connection(api_key)
+            if test_result.get("success"):
+                st.success(f"✅ API Connection successful! Response: {test_result['test_response']}")
+            else:
+                st.error(f"❌ API Test failed: {test_result.get('error')}")
+        
+        st.write("**Current API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
+        st.write("**Available OpenAI Models:** gpt-3.5-turbo, gpt-4 (if you have access)")
 
     project_info = st.session_state.get("project_info", {})
     project_info_raw = st.session_state.get("project_info_raw", "")
@@ -709,6 +750,48 @@ def main():
 
     st.header("Cash Flow Chart")
     st.line_chart(df_rnav[df_rnav["Year Index"].notna()][["Net Cash Flow", "Discounted Cash Flow"]])
+
+def test_openai_connection(api_key: str, project_name: str = "Test Project"):
+    """
+    Test function to debug OpenAI API issues
+    """
+    if not api_key:
+        return {"error": "No API key provided"}
+    
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        
+        # Simple test prompt
+        test_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Say 'Hello, API is working!'"}],
+            max_tokens=50
+        )
+        
+        return {
+            "success": True,
+            "test_response": test_response.choices[0].message.content,
+            "model": "gpt-3.5-turbo"
+        }
+        
+    except Exception as e:
+        return {"error": f"OpenAI API test failed: {str(e)}"}
+
+# Add debugging section to main function
+def add_debug_section():
+    """Add this to your main function for debugging"""
+    if api_key and st.checkbox("🔧 Debug Mode"):
+        st.subheader("🔍 API Debug Information")
+        
+        if st.button("Test OpenAI Connection"):
+            test_result = test_openai_connection(api_key)
+            if test_result.get("success"):
+                st.success(f"✅ API Connection successful! Response: {test_result['test_response']}")
+            else:
+                st.error(f"❌ API Test failed: {test_result.get('error')}")
+        
+        st.write("**Current API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
+        st.write("**Available OpenAI Models:** gpt-3.5-turbo, gpt-4 (if you have access)")
 
 # Remove or comment out all previous if __name__ == "__main__": blocks
 # ...existing code for all function definitions...
