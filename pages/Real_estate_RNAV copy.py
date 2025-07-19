@@ -9,13 +9,29 @@ import re
 # Optional: If openai is not installed, run: pip install openai
 import openai
 
+# Google Search API
+try:
+    from googleapiclient.discovery import build
+    GOOGLE_SEARCH_AVAILABLE = True
+except ImportError:
+    GOOGLE_SEARCH_AVAILABLE = False
+    st.warning("Google API client not installed. Install with: pip install google-api-python-client")
+
 print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
 
 # Load .env file (for local development)
 load_dotenv()
 
-# Read API key from environment
+# Read API keys from environment
 api_key = os.getenv("OPENAI_API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY")
+google_search_engine_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+
+# Debug: Print API key status (without exposing keys)
+print(f"Google API Key present: {bool(google_api_key)}")
+print(f"Google Search Engine ID present: {bool(google_search_engine_id)}")
+print(f"Google API Client available: {GOOGLE_SEARCH_AVAILABLE}")
+
 if not api_key:
     st.warning(
         "⚠️ OPENAI_API_KEY environment variable is not set.\n\n"
@@ -28,6 +44,19 @@ if not api_key:
         "⚡ You can still use the calculator without ChatGPT integration!"
     )
     api_key = None  # Allow app to continue without API key
+
+# Check Google Search API setup
+google_search_enabled = bool(google_api_key and google_search_engine_id and GOOGLE_SEARCH_AVAILABLE)
+if not google_search_enabled and api_key:
+    st.info(
+        "🔍 **Google Search Integration**: Set up Google Custom Search for enhanced web search.\n\n"
+        "**Setup Steps:**\n"
+        "1. Get Google Custom Search API key from Google Cloud Console\n"
+        "2. Create a Custom Search Engine and get the Search Engine ID\n"
+        "3. Add to your .env file:\n"
+        "   - `GOOGLE_API_KEY=your_google_api_key`\n"
+        "   - `GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id`"
+    )
 
 #%%
 def selling_progress_schedule(
@@ -449,80 +478,78 @@ def RNAV_Calculation(
 
 def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     """
-    Query OpenAI GPT with web search capabilities to get real-time project information.
-    Uses OpenAI's browsing feature if available.
+    Get project information using Google Search + OpenAI analysis
+    This combines real-time web search with AI interpretation
     """
     
-    # Enhanced prompt for web search
+    # Step 1: Search Google for current information
+    search_results = search_project_online(project_name)
+    
+    # Step 2: Prepare context from search results
+    search_context = ""
+    if search_results["status"] == "success" and search_results["results"]:
+        search_context = "Here are recent search results about this project:\n\n"
+        for i, result in enumerate(search_results["results"][:10], 1):  # Use top 10 results
+            search_context += f"{i}. **{result['title']}**\n"
+            search_context += f"   Link: {result['link']}\n"
+            search_context += f"   Info: {result['snippet']}\n\n"
+        search_context += "\nBased on these search results, please extract and analyze the following information:\n"
+    else:
+        search_context = f"Google Search Status: {search_results['message']}\n"
+        search_context += "Please provide analysis based on your training data and Vietnamese market knowledge:\n"
+    
+    # Step 3: Create enhanced prompt with search context
     prompt = (
-        f"Please search the internet for current information about the real estate project '{project_name}' in Vietnam. "
-        f"I need the following specific information:\n\n"
+        f"Analyze the real estate project '{project_name}' in Vietnam.\n\n"
+        f"{search_context}\n"
+        f"Please extract and provide the following information:\n\n"
         f"1. Project location, developer, and current status\n"
-        f"2. Current selling prices (primary and secondary market)\n"
-        f"3. Project scale (total area, number of units, GFA)\n"
-        f"4. Land area and estimated land costs\n"
-        f"5. Construction specifications and estimated costs\n\n"
-        f"Please browse recent real estate websites, news articles, and official project information. "
+        f"2. Current selling prices (if mentioned in search results)\n"
+        f"3. Project scale and specifications\n"
+        f"4. Market positioning and category\n\n"
         f"Format your response EXACTLY as follows:\n\n"
-        f"Info: [Detailed project description with current status and location]\n"
-        f"Average Selling Price: [Current market price per m² in VND, numbers only]\n"
-        f"Net Sellable Area: [Total sellable area in m², numbers only]\n"
-        f"Gross Floor Area: [Total GFA in m², numbers only]\n"
+        f"Info: [Detailed project description with current status, location, and developer]\n"
+        f"Average Selling Price: [Current price per m² in VND, numbers only - if not found, estimate based on project category]\n"
+        f"Net Sellable Area: [Total sellable area in m², numbers only - if not found, estimate based on project scale]\n"
+        f"Gross Floor Area: [Total GFA in m², numbers only - if not found, estimate based on project scale]\n"
         f"Construction Cost per sqm: [Estimated construction cost per m² in VND, numbers only]\n"
-        f"Land Area: [Land area in m², numbers only]\n"
+        f"Land Area: [Land area in m², numbers only - if not found, estimate based on project scale]\n"
         f"Land Cost per sqm: [Estimated land cost per m² in VND, numbers only]\n"
-        f"Image: [Project image URL if found, otherwise 'N/A']\n"
-        f"Sources: [List the websites/sources you found this information from]\n\n"
-        f"If you cannot access the internet, please clearly state that limitation."
+        f"Image: [Image URL if found in search results, otherwise 'N/A']\n"
+        f"Sources: [List key sources from search results or 'Training data + market estimates']\n"
+        f"Confidence: [High/Medium/Low based on available data]\n\n"
+        f"Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available."
     )
     
-    # Try different approaches for web search
-    models_with_search = [
-        "gpt-4o",  # Latest model with potential browsing
-        "gpt-4-1106-preview",  # GPT-4 Turbo with browsing
-        "gpt-4",
-        "gpt-3.5-turbo"
-    ]
+    # Step 4: Get OpenAI analysis
+    models_to_try = ["gpt-4", "gpt-3.5-turbo", "gpt-4o"]
     
-    for model in models_with_search:
+    for model in models_to_try:
         try:
             client = openai.OpenAI(api_key=openai_api_key)
             
-            # Try with system message that encourages web search
             response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {
                         "role": "system", 
-                        "content": "You are a real estate analyst with web browsing capabilities. "
-                                   "Search the internet for current, accurate information about real estate projects. "
-                                   "Use recent sources and provide factual, up-to-date data."
+                        "content": "You are an expert Vietnamese real estate analyst. Analyze search results and provide accurate project information. Use current market data when available, and provide reasonable estimates based on Vietnamese market standards when specific data is missing."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1000,
-                temperature=0.1,  # Low temperature for factual accuracy
+                max_tokens=1200,
+                temperature=0.2,  # Low temperature for factual accuracy
             )
             
             content = response.choices[0].message.content.strip()
-            
-            # Check if the response indicates web search was performed
-            if any(indicator in content.lower() for indicator in [
-                "i cannot browse", "i don't have access", "cannot access the internet", 
-                "i'm not able to search", "no internet access"
-            ]):
-                # If this model can't browse, try the next one
-                continue
-            
-            # If we get here, the model responded (may or may not have browsed)
             break
             
         except Exception as model_error:
-            if model == models_with_search[-1]:
+            if model == models_to_try[-1]:
                 return {"error": f"All models failed. Last error: {str(model_error)}"}
             continue
     
-    # Parse the response
+    # Step 5: Parse the response
     result = {
         "image_url": "",
         "basic_info": "",
@@ -533,9 +560,12 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         "land_area": "",
         "land_cost_per_sqm": "",
         "sources": "",
+        "confidence": "",
         "raw_content": content,
         "model_used": model,
-        "search_attempted": True
+        "search_results_count": len(search_results.get("results", [])),
+        "search_status": search_results["status"],
+        "google_search_used": search_results["status"] == "success"
     }
     
     # Enhanced regex patterns
@@ -548,7 +578,8 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         "land_area": r"Land Area:\s*([0-9,\.]+)",
         "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
         "image_url": r"Image:\s*(.*?)(?=Sources:|$)",
-        "sources": r"Sources:\s*(.*?)(?=\n|$)"
+        "sources": r"Sources:\s*(.*?)(?=Confidence:|$)",
+        "confidence": r"Confidence:\s*(.*?)(?=\n|$)"
     }
     
     for key, pat in patterns.items():
@@ -556,81 +587,128 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         if m:
             value = m.group(1).strip()
             # Clean up numeric values
-            if key not in ["basic_info", "image_url", "sources"] and value:
+            if key not in ["basic_info", "image_url", "sources", "confidence"] and value:
                 value = re.sub(r'[^\d\.]', '', value)  # Keep only digits and dots
             result[key] = value
-    
-    # Check if web search was actually performed
-    web_indicators = ["source:", "website", "according to", "found on", "search results"]
-    result["web_search_performed"] = any(indicator in content.lower() for indicator in web_indicators)
     
     return result
 
 def search_project_online(project_name: str) -> dict:
     """
-    Optional: Search for project information online using requests
-    This is a placeholder for web search functionality
-    You could integrate with Google Search API, Bing API, or web scraping
+    Search for project information online using Google Custom Search API
     """
-    # Placeholder for web search integration
-    # You could implement:
-    # 1. Google Custom Search API
-    # 2. Bing Search API  
-    # 3. Web scraping (with caution for legal/ethical compliance)
-    
-    search_info = {
-        "status": "not_implemented",
-        "message": "Web search integration not implemented. Using market estimates instead.",
-        "suggestion": "For real-time data, consider integrating Google Custom Search API or manual research."
-    }
-    
-    return search_info
-
-def get_vietnam_market_estimates(project_type: str = "premium_condo") -> dict:
-    """
-    Get current Vietnamese real estate market estimates (2024-2025)
-    Based on market research and industry reports
-    """
-    market_data = {
-        "luxury_condo": {
-            "description": "Luxury condominiums in prime locations (District 1, 3, 7 HCMC or Ba Dinh, Dong Da Hanoi)",
-            "asp_range": "70-120 million VND/m²",
-            "asp_typical": 80000000,
-            "construction_cost": 18000000,
-            "land_cost_hcmc": 200000000,
-            "land_cost_hanoi": 150000000,
-            "examples": ["Landmark 81", "Vinhomes Central Park", "Masteri Thao Dien"]
-        },
-        "premium_condo": {
-            "description": "Premium condominiums in good locations",
-            "asp_range": "40-70 million VND/m²",
-            "asp_typical": 50000000,
-            "construction_cost": 15000000,
-            "land_cost_hcmc": 100000000,
-            "land_cost_hanoi": 80000000,
-            "examples": ["Vinhomes Grand Park", "Saigon Royal", "Times City"]
-        },
-        "mid_range_condo": {
-            "description": "Mid-range condominiums in developing areas",
-            "asp_range": "25-45 million VND/m²",
-            "asp_typical": 35000000,
-            "construction_cost": 12000000,
-            "land_cost_hcmc": 50000000,
-            "land_cost_hanoi": 40000000,
-            "examples": ["Celadon City", "Akira City", "Jamila Khang Dien"]
-        },
-        "affordable_housing": {
-            "description": "Affordable housing and social housing projects",
-            "asp_range": "15-30 million VND/m²",
-            "asp_typical": 25000000,
-            "construction_cost": 10000000,
-            "land_cost_hcmc": 30000000,
-            "land_cost_hanoi": 25000000,
-            "examples": ["EHomeS", "Ehome Nam Sai Gon", "Green Town"]
+    if not google_search_enabled:
+        return {
+            "status": "not_configured", 
+            "message": f"Google Search API not configured. API Key: {bool(google_api_key)}, Engine ID: {bool(google_search_engine_id)}, Client Available: {GOOGLE_SEARCH_AVAILABLE}",
+            "results": []
         }
+    
+    try:
+        # Build the Google Search service
+        service = build("customsearch", "v1", developerKey=google_api_key)
+        
+        # Search queries for Vietnamese real estate
+        search_queries = [
+            f"{project_name} dự án bất động sản Vietnam",
+            f"{project_name} real estate project Vietnam price",
+            f"{project_name} apartment condo Vietnam selling price",
+            f'"{project_name}" developer Vietnam real estate'
+        ]
+        
+        all_results = []
+        
+        for i, query in enumerate(search_queries):
+            try:
+                print(f"Executing search query {i+1}: {query}")
+                
+                # Execute search with more specific parameters
+                result = service.cse().list(
+                    q=query,
+                    cx=google_search_engine_id,
+                    num=3,  # Reduced to 3 to avoid quota issues
+                    lr='lang_vi|lang_en',  # Vietnamese and English
+                    dateRestrict='y2',  # Results from last 2 years
+                    safe='medium',
+                    fields='items(title,link,snippet,displayLink)'  # Only get needed fields
+                ).execute()
+                
+                print(f"Search {i+1} returned {len(result.get('items', []))} results")
+                
+                # Extract useful information
+                if 'items' in result:
+                    for item in result['items']:
+                        all_results.append({
+                            'title': item.get('title', ''),
+                            'link': item.get('link', ''),
+                            'snippet': item.get('snippet', ''),
+                            'display_link': item.get('displayLink', ''),
+                            'query_used': query
+                        })
+                        
+            except Exception as search_error:
+                print(f"Search query {i+1} failed: {str(search_error)}")
+                # Continue with next query instead of failing completely
+                continue
+        
+        print(f"Total search results collected: {len(all_results)}")
+        
+        return {
+            "status": "success",
+            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries",
+            "results": all_results,
+            "queries_attempted": len(search_queries),
+            "successful_queries": len([r for r in all_results if r])
+        }
+        
+    except Exception as e:
+        error_msg = f"Google Search API failed: {str(e)}"
+        print(f"Google Search Error: {error_msg}")
+        return {
+            "status": "error",
+            "message": error_msg,
+            "results": [],
+            "error_type": type(e).__name__
+        }
+
+def test_google_search_api() -> dict:
+    """
+    Test Google Search API configuration and connectivity
+    """
+    test_results = {
+        "api_key_present": bool(google_api_key),
+        "engine_id_present": bool(google_search_engine_id),
+        "client_available": GOOGLE_SEARCH_AVAILABLE,
+        "overall_enabled": google_search_enabled
     }
     
-    return market_data.get(project_type, market_data["premium_condo"])
+    if not google_search_enabled:
+        test_results["status"] = "disabled"
+        test_results["message"] = "Google Search is not properly configured"
+        return test_results
+    
+    try:
+        # Test with a simple search
+        service = build("customsearch", "v1", developerKey=google_api_key)
+        
+        result = service.cse().list(
+            q="test search",
+            cx=google_search_engine_id,
+            num=1
+        ).execute()
+        
+        test_results["status"] = "success"
+        test_results["message"] = "Google Search API is working correctly"
+        test_results["test_result_count"] = len(result.get('items', []))
+        
+    except Exception as e:
+        test_results["status"] = "error"
+        test_results["message"] = f"Google Search API test failed: {str(e)}"
+        test_results["error_type"] = type(e).__name__
+    
+    return test_results
+
+# ...existing code...
 
 def main():
     st.title("Real Estate RNAV Calculator")
@@ -660,13 +738,18 @@ def main():
                     if "error" in info:
                         st.error(f"❌ Error: {info['error']}")
                     else:
-                        # Show search status
-                        if info.get("web_search_performed"):
-                            st.success(f"✅ Web search performed successfully! Model: {info.get('model_used', 'unknown')}")
-                            if info.get("sources"):
-                                st.info(f"📄 Sources found: {info['sources']}")
+                        # Show search status with more details
+                        search_status = info.get("search_status", "unknown")
+                        search_count = info.get("search_results_count", 0)
+                        google_used = info.get("google_search_used", False)
+                        
+                        if google_used:
+                            st.success(f"✅ Google Search performed successfully! Found {search_count} results. Model: {info.get('model_used', 'unknown')}")
                         else:
-                            st.warning(f"⚠️ Web search not available. Used model: {info.get('model_used', 'unknown')} with training data only.")
+                            st.warning(f"⚠️ Google Search not available ({search_status}). Used model: {info.get('model_used', 'unknown')} with training data only.")
+                        
+                        if info.get("sources"):
+                            st.info(f"📄 Sources found: {info['sources']}")
                     
                     # Save the raw response
                     if "raw_content" in info:
@@ -674,50 +757,99 @@ def main():
                     else:
                         st.session_state["project_info_raw"] = str(info)
         
-        # Add information about web search
+        # Add Google Search testing section
         st.markdown("---")
-        st.markdown("🌐 **Web Search**: This attempts to use OpenAI's web browsing capabilities for real-time data.")
+        st.markdown("🌐 **Google Search Configuration & Testing**")
         
-        # Add expandable info about web search limitations
-        with st.expander("� About Web Search with OpenAI"):
+        # Test Google Search API
+        if st.button("🧪 Test Google Search API"):
+            with st.spinner("Testing Google Search API..."):
+                test_result = test_google_search_api()
+                
+                if test_result["status"] == "success":
+                    st.success(f"✅ Google Search API is working! Test found {test_result.get('test_result_count', 0)} results.")
+                elif test_result["status"] == "disabled":
+                    st.warning(f"⚠️ Google Search is disabled: {test_result['message']}")
+                else:
+                    st.error(f"❌ Google Search API test failed: {test_result['message']}")
+                
+                # Show detailed configuration status
+                with st.expander("🔧 Detailed Configuration Status"):
+                    st.json(test_result)
+        
+        # Show current Google Search status
+        if google_search_enabled:
+            st.success("✅ Google Search is configured and ready to use!")
+        else:
+            st.warning("⚠️ Google Search requires setup. Missing components:")
+            missing = []
+            if not google_api_key:
+                missing.append("GOOGLE_API_KEY environment variable")
+            if not google_search_engine_id:
+                missing.append("GOOGLE_SEARCH_ENGINE_ID environment variable")
+            if not GOOGLE_SEARCH_AVAILABLE:
+                missing.append("google-api-python-client package")
+            
+            for item in missing:
+                st.write(f"   - {item}")
+        
+        # Add setup instructions
+        with st.expander("📋 Google Search Setup Instructions"):
             st.markdown("""
-            **How it works:**
-            - Attempts to use OpenAI models with web browsing capabilities
-            - Searches for current project information online
-            - Provides real-time market data when available
+            **Step 1: Install Google API Client**
+            ```bash
+            pip install google-api-python-client
+            ```
             
-            **Requirements for Web Search:**
-            - OpenAI API with browsing access (ChatGPT Plus features)
-            - Models: gpt-4o, gpt-4-1106-preview (with browsing)
-            - May require special API access or higher tier subscription
+            **Step 2: Get Google Custom Search API Key**
+            1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+            2. Create a new project or select existing one
+            3. Enable "Custom Search API"
+            4. Create credentials (API Key)
+            5. Copy the API key
             
-            **If Web Search Fails:**
-            - The system will indicate "Web search not available"
-            - You can manually research the project and input the data
-            - Consider upgrading to OpenAI API with browsing capabilities
+            **Step 3: Create Custom Search Engine**
+            1. Go to [Google Custom Search](https://cse.google.com/)
+            2. Click "Add" to create a new search engine
+            3. Enter "*" as the site to search (for whole web)
+            4. Create the search engine
+            5. Copy the Search Engine ID (cx parameter)
             
-            **Alternative Solutions:**
-            1. **Manual Research**: Search real estate websites yourself
-            2. **API Upgrade**: Get OpenAI API with browsing access
-            3. **External APIs**: Integrate Google Search API or similar
+            **Step 4: Set Environment Variables**
+            Add to your `.env` file:
+            ```
+            GOOGLE_API_KEY=your_google_api_key_here
+            GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
+            ```
+            
+            **For Streamlit Cloud:**
+            Add these as secrets in your app settings.
             """)
-        
-    else:
-        st.info("💡 Web search integration requires an OpenAI API key. Please set up your API key to use this feature.")
 
     # Add debug section
     if api_key and st.checkbox("🔧 Debug Mode"):
         st.subheader("🔍 API Debug Information")
         
+        # Test OpenAI
         if st.button("Test OpenAI Connection"):
             test_result = test_openai_connection(api_key)
             if test_result.get("success"):
-                st.success(f"✅ API Connection successful! Response: {test_result['test_response']}")
+                st.success(f"✅ OpenAI API Connection successful! Response: {test_result['test_response']}")
             else:
-                st.error(f"❌ API Test failed: {test_result.get('error')}")
+                st.error(f"❌ OpenAI API Test failed: {test_result.get('error')}")
         
-        st.write("**Current API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
-        st.write("**Available OpenAI Models:** gpt-3.5-turbo, gpt-4 (if you have access)")
+        # Test Google Search
+        if st.button("Test Google Search (Debug Mode)"):
+            if google_search_enabled:
+                test_search = search_project_online("test project")
+                st.json(test_search)
+            else:
+                st.error("Google Search not enabled - check configuration above")
+        
+        st.write("**OpenAI API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
+        st.write("**Google API Key present:**", bool(google_api_key))
+        st.write("**Google Search Engine ID present:**", bool(google_search_engine_id))
+        st.write("**Google API Client installed:**", GOOGLE_SEARCH_AVAILABLE)
 
     project_info = st.session_state.get("project_info", {})
     project_info_raw = st.session_state.get("project_info_raw", "")

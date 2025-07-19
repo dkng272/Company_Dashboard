@@ -7,3 +7,4 @@ openpyxl
 requests
 python-dotenv
 openai
+google-api-python-client
