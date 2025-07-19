@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import re
 
+
 # Optional: If openai is not installed, run: pip install openai
 import openai
 
@@ -17,7 +18,10 @@ except ImportError:
     GOOGLE_SEARCH_AVAILABLE = False
     st.warning("Google API client not installed. Install with: pip install google-api-python-client")
 
-print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
+# Import utility functions
+
+
+# print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
 
 # Load .env file (for local development)
 load_dotenv()
@@ -28,9 +32,9 @@ google_api_key = os.getenv("GOOGLE_API_KEY")
 google_search_engine_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
 
 # Debug: Print API key status (without exposing keys)
-print(f"Google API Key present: {bool(google_api_key)}")
-print(f"Google Search Engine ID present: {bool(google_search_engine_id)}")
-print(f"Google API Client available: {GOOGLE_SEARCH_AVAILABLE}")
+# print(f"Google API Key present: {bool(google_api_key)}")
+# print(f"Google Search Engine ID present: {bool(google_search_engine_id)}")
+# print(f"Google API Client available: {GOOGLE_SEARCH_AVAILABLE}")
 
 if not api_key:
     st.warning(
@@ -474,6 +478,49 @@ def RNAV_Calculation(
 
 #     print(df_rnav) 
 
+def format_vnd_billions(value: float) -> str:
+    """
+    Format a VND value into billions with proper formatting.
+    
+    Args:
+        value (float): Raw VND value
+        
+    Returns:
+        str: Formatted string in billions VND (e.g., "31.84 billion VND")
+    """
+    if value == 0:
+        return "0 VND"
+    
+    # Convert to billions
+    billions = value / 1_000_000_000
+    
+    # Format with appropriate decimal places
+    if abs(billions) >= 1000:
+        # For very large numbers, show fewer decimals
+        return f"{billions:,.0f} billion VND"
+    elif abs(billions) >= 100:
+        # For hundreds of billions, show 1 decimal
+        return f"{billions:,.1f} billion VND"
+    elif abs(billions) >= 10:
+        # For tens of billions, show 1 decimal
+        return f"{billions:,.1f} billion VND"
+    elif abs(billions) >= 1:
+        # For billions, show 2 decimals
+        return f"{billions:,.2f} billion VND"
+    else:
+        # For less than 1 billion, show in millions
+        millions = value / 1_000_000
+        if abs(millions) >= 1:
+            return f"{millions:,.0f} million VND"
+        else:
+            # For very small amounts, show in thousands or raw
+            if abs(value) >= 1_000:
+                thousands = value / 1_000
+                return f"{thousands:,.0f} thousand VND"
+            else:
+                return f"{value:,.0f} VND"
+
+
 # %%
 
 def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
@@ -515,7 +562,6 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"Construction Cost per sqm: [Estimated construction cost per m² in VND, numbers only]\n"
         f"Land Area: [Land area in m², numbers only - if not found, estimate based on project scale]\n"
         f"Land Cost per sqm: [Estimated land cost per m² in VND, numbers only]\n"
-        f"Image: [Image URL if found in search results, otherwise 'N/A']\n"
         f"Sources: [List key sources from search results or 'Training data + market estimates']\n"
         f"Confidence: [High/Medium/Low based on available data]\n\n"
         f"Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available."
@@ -551,7 +597,6 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     
     # Step 5: Parse the response
     result = {
-        "image_url": "",
         "basic_info": "",
         "asp": "",
         "nsa": "",
@@ -577,7 +622,6 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+)",
         "land_area": r"Land Area:\s*([0-9,\.]+)",
         "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
-        "image_url": r"Image:\s*(.*?)(?=Sources:|$)",
         "sources": r"Sources:\s*(.*?)(?=Confidence:|$)",
         "confidence": r"Confidence:\s*(.*?)(?=\n|$)"
     }
@@ -587,7 +631,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         if m:
             value = m.group(1).strip()
             # Clean up numeric values
-            if key not in ["basic_info", "image_url", "sources", "confidence"] and value:
+            if key not in ["basic_info", "sources", "confidence"] and value:
                 value = re.sub(r'[^\d\.]', '', value)  # Keep only digits and dots
             result[key] = value
     
@@ -671,44 +715,52 @@ def search_project_online(project_name: str) -> dict:
             "error_type": type(e).__name__
         }
 
-def test_google_search_api() -> dict:
+def get_vietnam_market_estimates(project_type: str = "premium_condo") -> dict:
     """
-    Test Google Search API configuration and connectivity
+    Get current Vietnamese real estate market estimates (2024-2025)
+    Based on market research and industry reports
     """
-    test_results = {
-        "api_key_present": bool(google_api_key),
-        "engine_id_present": bool(google_search_engine_id),
-        "client_available": GOOGLE_SEARCH_AVAILABLE,
-        "overall_enabled": google_search_enabled
+    market_data = {
+        "luxury_condo": {
+            "description": "Luxury condominiums in prime locations (District 1, 3, 7 HCMC or Ba Dinh, Dong Da Hanoi)",
+            "asp_range": "70-120 million VND/m²",
+            "asp_typical": 80000000,
+            "construction_cost": 18000000,
+            "land_cost_hcmc": 200000000,
+            "land_cost_hanoi": 150000000,
+            "examples": ["Landmark 81", "Vinhomes Central Park", "Masteri Thao Dien"]
+        },
+        "premium_condo": {
+            "description": "Premium condominiums in good locations",
+            "asp_range": "40-70 million VND/m²",
+            "asp_typical": 50000000,
+            "construction_cost": 15000000,
+            "land_cost_hcmc": 100000000,
+            "land_cost_hanoi": 80000000,
+            "examples": ["Vinhomes Grand Park", "Saigon Royal", "Times City"]
+        },
+        "mid_range_condo": {
+            "description": "Mid-range condominiums in developing areas",
+            "asp_range": "25-45 million VND/m²",
+            "asp_typical": 35000000,
+            "construction_cost": 12000000,
+            "land_cost_hcmc": 50000000,
+            "land_cost_hanoi": 40000000,
+            "examples": ["Celadon City", "Akira City", "Jamila Khang Dien"]
+        },
+        "affordable_housing": {
+            "description": "Affordable housing and social housing projects",
+            "asp_range": "15-30 million VND/m²",
+            "asp_typical": 25000000,
+            "construction_cost": 10000000,
+            "land_cost_hcmc": 30000000,
+            "land_cost_hanoi": 25000000,
+            "examples": ["EHomeS", "Ehome Nam Sai Gon", "Green Town"]
+        }
     }
     
-    if not google_search_enabled:
-        test_results["status"] = "disabled"
-        test_results["message"] = "Google Search is not properly configured"
-        return test_results
-    
-    try:
-        # Test with a simple search
-        service = build("customsearch", "v1", developerKey=google_api_key)
-        
-        result = service.cse().list(
-            q="test search",
-            cx=google_search_engine_id,
-            num=1
-        ).execute()
-        
-        test_results["status"] = "success"
-        test_results["message"] = "Google Search API is working correctly"
-        test_results["test_result_count"] = len(result.get('items', []))
-        
-    except Exception as e:
-        test_results["status"] = "error"
-        test_results["message"] = f"Google Search API test failed: {str(e)}"
-        test_results["error_type"] = type(e).__name__
-    
-    return test_results
+    return market_data.get(project_type, market_data["premium_condo"])
 
-# ...existing code...
 
 def main():
     st.title("Real Estate RNAV Calculator")
@@ -725,6 +777,8 @@ def main():
         st.session_state["project_info"] = {}
     if "project_info_raw" not in st.session_state:
         st.session_state["project_info_raw"] = ""
+    if "show_raw_response" not in st.session_state:
+        st.session_state["show_raw_response"] = False
     
     # Only show ChatGPT button if API key is available
     if api_key:
@@ -757,99 +811,13 @@ def main():
                     else:
                         st.session_state["project_info_raw"] = str(info)
         
-        # Add Google Search testing section
-        st.markdown("---")
-        st.markdown("🌐 **Google Search Configuration & Testing**")
-        
-        # Test Google Search API
-        if st.button("🧪 Test Google Search API"):
-            with st.spinner("Testing Google Search API..."):
-                test_result = test_google_search_api()
-                
-                if test_result["status"] == "success":
-                    st.success(f"✅ Google Search API is working! Test found {test_result.get('test_result_count', 0)} results.")
-                elif test_result["status"] == "disabled":
-                    st.warning(f"⚠️ Google Search is disabled: {test_result['message']}")
-                else:
-                    st.error(f"❌ Google Search API test failed: {test_result['message']}")
-                
-                # Show detailed configuration status
-                with st.expander("🔧 Detailed Configuration Status"):
-                    st.json(test_result)
-        
         # Show current Google Search status
         if google_search_enabled:
             st.success("✅ Google Search is configured and ready to use!")
         else:
-            st.warning("⚠️ Google Search requires setup. Missing components:")
-            missing = []
-            if not google_api_key:
-                missing.append("GOOGLE_API_KEY environment variable")
-            if not google_search_engine_id:
-                missing.append("GOOGLE_SEARCH_ENGINE_ID environment variable")
-            if not GOOGLE_SEARCH_AVAILABLE:
-                missing.append("google-api-python-client package")
-            
-            for item in missing:
-                st.write(f"   - {item}")
-        
-        # Add setup instructions
-        with st.expander("📋 Google Search Setup Instructions"):
-            st.markdown("""
-            **Step 1: Install Google API Client**
-            ```bash
-            pip install google-api-python-client
-            ```
-            
-            **Step 2: Get Google Custom Search API Key**
-            1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-            2. Create a new project or select existing one
-            3. Enable "Custom Search API"
-            4. Create credentials (API Key)
-            5. Copy the API key
-            
-            **Step 3: Create Custom Search Engine**
-            1. Go to [Google Custom Search](https://cse.google.com/)
-            2. Click "Add" to create a new search engine
-            3. Enter "*" as the site to search (for whole web)
-            4. Create the search engine
-            5. Copy the Search Engine ID (cx parameter)
-            
-            **Step 4: Set Environment Variables**
-            Add to your `.env` file:
-            ```
-            GOOGLE_API_KEY=your_google_api_key_here
-            GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
-            ```
-            
-            **For Streamlit Cloud:**
-            Add these as secrets in your app settings.
-            """)
-
-    # Add debug section
-    if api_key and st.checkbox("🔧 Debug Mode"):
-        st.subheader("🔍 API Debug Information")
-        
-        # Test OpenAI
-        if st.button("Test OpenAI Connection"):
-            test_result = test_openai_connection(api_key)
-            if test_result.get("success"):
-                st.success(f"✅ OpenAI API Connection successful! Response: {test_result['test_response']}")
-            else:
-                st.error(f"❌ OpenAI API Test failed: {test_result.get('error')}")
-        
-        # Test Google Search
-        if st.button("Test Google Search (Debug Mode)"):
-            if google_search_enabled:
-                test_search = search_project_online("test project")
-                st.json(test_search)
-            else:
-                st.error("Google Search not enabled - check configuration above")
-        
-        st.write("**OpenAI API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
-        st.write("**Google API Key present:**", bool(google_api_key))
-        st.write("**Google Search Engine ID present:**", bool(google_search_engine_id))
-        st.write("**Google API Client installed:**", GOOGLE_SEARCH_AVAILABLE)
+            st.info("🔍 **Google Search Integration**: Set up Google Custom Search for enhanced web search.")
+    else:
+        st.info("💡 Set up your OpenAI API key to use AI-powered project information search.")
 
     project_info = st.session_state.get("project_info", {})
     project_info_raw = st.session_state.get("project_info_raw", "")
@@ -858,33 +826,25 @@ def main():
     if not isinstance(project_info, dict):
         project_info = {}
 
-    # Show raw response from ChatGPT
-    if project_info_raw:
-        st.markdown("**Raw AI Response:**")
-        st.code(project_info_raw, language="markdown")
-    elif isinstance(project_info, dict) and "raw_content" in project_info:
-        st.markdown("**Raw AI Response:**")
-        st.code(project_info["raw_content"], language="markdown")
-
     # Show sources if web search was performed
     if isinstance(project_info, dict) and project_info.get("sources"):
         st.markdown("**🔗 Sources Found:**")
         st.markdown(project_info["sources"])
 
+    # Toggle button for raw AI response
+    if project_info_raw or (isinstance(project_info, dict) and "raw_content" in project_info):
+        if st.button("🔍 Show/Hide Raw AI Response"):
+            st.session_state["show_raw_response"] = not st.session_state["show_raw_response"]
+        
+        # Show raw response from ChatGPT only if toggled on
+        if st.session_state["show_raw_response"]:
+            st.markdown("**Raw AI Response:**")
+            if project_info_raw:
+                st.code(project_info_raw, language="markdown")
+            elif isinstance(project_info, dict) and "raw_content" in project_info:
+                st.code(project_info["raw_content"], language="markdown")
+
     # Show image and basic info if available
-    if project_info.get("image_url"):
-        image_url = str(project_info["image_url"]).strip()
-        if (
-            image_url
-            and image_url.lower() != "none"
-            and image_url.lower() != "n/a"
-            and image_url.lower().startswith("http")
-        ):
-            st.image(image_url, caption="Project Image", use_container_width=True)
-        else:
-            st.write("No image available or invalid image URL.")
-            st.caption(f"Image URL received: `{image_url}`")
-    
     if project_info.get("basic_info"):
         st.info(project_info["basic_info"])
     elif project_info.get("error"):
@@ -905,85 +865,74 @@ def main():
     land_area_suggest = project_info.get("land_area", "")
     land_cost_suggest = project_info.get("land_cost_per_sqm", "")
 
-    st.header("Project Parameters")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 265_295), key="nsa")
-    with col2:
-        st.markdown(f"ChatGPT suggestion: **{nsa_suggest}**" if nsa_suggest else "ChatGPT suggestion: _none_")
-        if nsa_suggest:
-            if st.button("Copy", key="copy_nsa"):
-                st.warning("Please manually copy the suggested value into the textbox above. (Streamlit does not allow programmatic update after widget creation.)")
+    # Create two parallel columns for Project Parameters and Timeline
+    param_col, timeline_col = st.columns(2)
 
-    col3, col4 = st.columns([3, 1])
-    with col3:
-        asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 120_000_000), key="asp")
-    with col4:
-        st.markdown(f"ChatGPT suggestion: **{asp_suggest}**" if asp_suggest else "ChatGPT suggestion: _none_")
-        if asp_suggest:
-            if st.button("Copy", key="copy_asp"):
-                st.warning("Please manually copy the suggested value into the textbox above.")
+    with param_col:
+        st.header("Project Parameters")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 265_295), key="nsa")
+        with col2:
+            st.markdown(f"AI suggestion: **{nsa_suggest}**" if nsa_suggest else "AI suggestion: _none_")
 
-    col5, col6 = st.columns([3, 1])
-    with col5:
-        gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
-    with col6:
-        st.markdown(f"ChatGPT suggestion: **{gfa_suggest}**" if gfa_suggest else "ChatGPT suggestion: _none_")
-        if gfa_suggest:
-            if st.button("Copy", key="copy_gfa"):
-                st.warning("Please manually copy the suggested value into the textbox above.")
+        col3, col4 = st.columns([3, 1])
+        with col3:
+            asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 120_000_000), key="asp")
+        with col4:
+            st.markdown(f"AI suggestion: **{asp_suggest}**" if asp_suggest else "AI suggestion: _none_")
 
-    col7, col8 = st.columns([3, 1])
-    with col7:
-        construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
-    with col8:
-        st.markdown(f"ChatGPT suggestion: **{construction_cost_suggest}**" if construction_cost_suggest else "ChatGPT suggestion: _none_")
-        if construction_cost_suggest:
-            if st.button("Copy", key="copy_construction_cost"):
-                st.warning("Please manually copy the suggested value into the textbox above.")
+        col5, col6 = st.columns([3, 1])
+        with col5:
+            gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
+        with col6:
+            st.markdown(f"AI suggestion: **{gfa_suggest}**" if gfa_suggest else "AI suggestion: _none_")
 
-    col9, col10 = st.columns([3, 1])
-    with col9:
-        land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 67_143), key="land_area")
-    with col10:
-        st.markdown(f"ChatGPT suggestion: **{land_area_suggest}**" if land_area_suggest else "ChatGPT suggestion: _none_")
-        if land_area_suggest:
-            if st.button("Copy", key="copy_land_area"):
-                st.warning("Please manually copy the suggested value into the textbox above.")
+        col7, col8 = st.columns([3, 1])
+        with col7:
+            construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
+        with col8:
+            st.markdown(f"AI suggestion: **{construction_cost_suggest}**" if construction_cost_suggest else "AI suggestion: _none_")
 
-    col11, col12 = st.columns([3, 1])
-    with col11:
-        land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 48_500_000), key="land_cost_per_sqm")
-    with col12:
-        st.markdown(f"ChatGPT suggestion: **{land_cost_suggest}**" if land_cost_suggest else "ChatGPT suggestion: _none_")
-        if land_cost_suggest:
-            if st.button("Copy", key="copy_land_cost"):
-                st.warning("Please manually copy the suggested value into the textbox above.")
+        col9, col10 = st.columns([3, 1])
+        with col9:
+            land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 67_143), key="land_area")
+        with col10:
+            st.markdown(f"AI suggestion: **{land_area_suggest}**" if land_area_suggest else "AI suggestion: _none_")
 
-    # Button to copy all suggested values
-    if st.button("Copy All Suggested Values"):
-        st.warning("Please manually copy the suggested values into the textboxes above. (Streamlit does not allow programmatic update after widget creation.)")
+        col11, col12 = st.columns([3, 1])
+        with col11:
+            land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 48_500_000), key="land_cost_per_sqm")
+        with col12:
+            st.markdown(f"AI suggestion: **{land_cost_suggest}**" if land_cost_suggest else "AI suggestion: _none_")
 
-    # ...existing code for timeline, calculations, and outputs...
-    st.header("Timeline")
-    current_year = st.number_input("Current Year", value=2025)
-    start_year = st.number_input("Construction/Sales Start Year", value=2025)
-    num_years = st.number_input("Number of Years (Construction/Sales)", value=3)
-    start_booking_year = st.number_input("Revenue Booking Start Year", value=2027)
-    complete_year = st.number_input("Project Completion Year", value=2030)
+        # Button to copy all suggested values
+        if st.button("Copy All Suggested Values"):
+            st.warning("Please manually copy the suggested values into the textboxes above. (Streamlit does not allow programmatic update after widget creation.)")
+
+    with timeline_col:
+        st.header("Timeline")
+        current_year = st.number_input("Current Year", value=2025)
+        start_year = st.number_input("Construction/Sales Start Year", value=2025)
+        num_years = st.number_input("Number of Years (Construction/Sales)", value=3)
+        start_booking_year = st.number_input("Revenue Booking Start Year", value=2027)
+        complete_year = st.number_input("Project Completion Year", value=2030)
+        
+        st.markdown("---")
+        sga_percent = st.number_input("SG&A as % of Revenue", min_value=0.0, max_value=1.0, value=0.08, step=0.01)
+        wacc_rate = st.number_input("WACC (Discount Rate, e.g. 0.12 for 12%)", min_value=0.0, max_value=1.0, value=0.12, step=0.01)
 
     # Calculate totals
     total_revenue = nsa * asp
     total_construction_cost = gfa * construction_cost_per_sqm
     total_land_cost = land_area * land_cost_per_sqm
-    total_sga_cost = total_revenue * st.number_input("SG&A as % of Revenue", min_value=0.0, max_value=1.0, value=0.08, step=0.01)
-    wacc_rate = st.number_input("WACC (Discount Rate, e.g. 0.12 for 12%)", min_value=0.0, max_value=1.0, value=0.12, step=0.01)
+    total_sga_cost = total_revenue * sga_percent
 
     st.subheader("Calculated Totals")
-    st.write(f"**Total Revenue:** {total_revenue:,.0f} VND")
-    st.write(f"**Total Construction Cost:** {total_construction_cost:,.0f} VND")
-    st.write(f"**Total Land Cost:** {total_land_cost:,.0f} VND")
-    st.write(f"**Total SG&A:** {total_sga_cost:,.0f} VND")
+    st.write(f"**Total Revenue:** {format_vnd_billions(total_revenue)}")
+    st.write(f"**Total Construction Cost:** {format_vnd_billions(total_construction_cost)}")
+    st.write(f"**Total Land Cost:** {format_vnd_billions(total_land_cost)}")
+    st.write(f"**Total SG&A:** {format_vnd_billions(total_sga_cost)}")
 
     # ...existing code for schedules and outputs...
     selling_progress = selling_progress_schedule(
@@ -1014,14 +963,12 @@ def main():
     st.header("P&L Schedule")
     st.dataframe(df_pnl)
 
-    st.header("Tax Expense Schedule")
-    st.write(tax_expense)
-
     st.header("RNAV Calculation (Discounted Cash Flows)")
     st.dataframe(df_rnav)
 
     st.subheader("RNAV (Total Discounted Cash Flow)")
-    st.write(f"{df_rnav.loc['Total', 'Discounted Cash Flow']:,.0f} VND")
+    rnav_value = df_rnav.loc['Total', 'Discounted Cash Flow']
+    st.write(f"**{format_vnd_billions(rnav_value)}**")
 
     st.header("Cash Flow Chart")
     st.line_chart(df_rnav[df_rnav["Year Index"].notna()][["Net Cash Flow", "Discounted Cash Flow"]])
@@ -1052,24 +999,7 @@ def test_openai_connection(api_key: str, project_name: str = "Test Project"):
     except Exception as e:
         return {"error": f"OpenAI API test failed: {str(e)}"}
 
-# Add debugging section to main function
-def add_debug_section():
-    """Add this to your main function for debugging"""
-    if api_key and st.checkbox("🔧 Debug Mode"):
-        st.subheader("🔍 API Debug Information")
-        
-        if st.button("Test OpenAI Connection"):
-            test_result = test_openai_connection(api_key)
-            if test_result.get("success"):
-                st.success(f"✅ API Connection successful! Response: {test_result['test_response']}")
-            else:
-                st.error(f"❌ API Test failed: {test_result.get('error')}")
-        
-        st.write("**Current API Key (first 10 chars):**", api_key[:10] + "..." if api_key else "None")
-        st.write("**Available OpenAI Models:** gpt-3.5-turbo, gpt-4 (if you have access)")
 
-# Remove or comment out all previous if __name__ == "__main__": blocks
-# ...existing code for all function definitions...
 
 if __name__ == "__main__":
     main()

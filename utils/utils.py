@@ -7,3 +7,5 @@ def get_project_root() -> Path:
 def get_data_path(filename: str) -> Path:
     """Returns the full path to a file in the /data directory."""
     return get_project_root() / "data" / filename
+
+
