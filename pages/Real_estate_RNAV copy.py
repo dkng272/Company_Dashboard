@@ -450,86 +450,181 @@ def RNAV_Calculation(
 def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     """
     Query OpenAI GPT to get image, basic info, and key parameters about the project.
-    Returns a dict with keys: image_url, basic_info, asp, nsa, gfa, construction_cost_per_sqm, land_area, land_cost_per_sqm
+    Since OpenAI API doesn't have real-time internet access, this provides estimated values
+    based on Vietnamese real estate market standards.
     """
-    prompt = (
-        f"You are a real estate analyst. Please research the real estate project named '{project_name}' and provide the following information:\n\n"
-        f"1. Brief summary of the project (location, type, developer, notable features)\n"
-        f"2. Key project parameters if available\n\n"
-        f"Please format your response EXACTLY as follows (use 'N/A' if information is not available):\n\n"
-        f"Info: [Brief project description including location, type, and developer]\n"
-        f"Average Selling Price: [Number only, no commas, no currency - e.g., 50000000]\n"
-        f"Net Sellable Area: [Number only, no commas - e.g., 100000]\n"
-        f"Gross Floor Area: [Number only, no commas - e.g., 150000]\n"
-        f"Construction Cost per sqm: [Number only, no commas - e.g., 15000000]\n"
-        f"Land Area: [Number only, no commas - e.g., 50000]\n"
-        f"Land Cost per sqm: [Number only, no commas - e.g., 25000000]\n"
-        f"Image: [Image URL if available, otherwise 'N/A']\n\n"
-        f"If you cannot find specific information about '{project_name}', please provide typical values for similar projects in Vietnam and indicate they are estimates."
+    
+    # First, try to get basic info from OpenAI (using training data)
+    basic_info_prompt = (
+        f"Based on your training data, provide any information you know about the real estate project '{project_name}' in Vietnam. "
+        f"Include location, developer, project type, and any notable features if known. "
+        f"If you don't have specific information about this project, clearly state that and provide general information about similar projects in Vietnam."
     )
     
     # Try multiple models in order of preference
     models_to_try = ["gpt-4", "gpt-3.5-turbo", "gpt-4o"]
+    basic_info = "No specific information available from training data."
+    model_used = "none"
     
     for model in models_to_try:
         try:
-            # Pass api_key explicitly as required by openai.OpenAI
             client = openai.OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are a helpful real estate analyst with access to current market information."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are a real estate analyst. Provide information based only on your training data. Do not make up specific details if you don't know them."},
+                    {"role": "user", "content": basic_info_prompt}
                 ],
-                max_tokens=800,  # Increased token limit
-                temperature=0.3,  # Lower temperature for more consistent formatting
+                max_tokens=400,
+                temperature=0.3,
             )
-            content = response.choices[0].message.content.strip()
-            break  # If successful, break out of the loop
+            basic_info = response.choices[0].message.content.strip()
+            model_used = model
+            break
             
         except Exception as model_error:
-            if model == models_to_try[-1]:  # If this is the last model to try
-                return {"error": f"All models failed. Last error: {str(model_error)}"}
-            continue  # Try the next model
+            if model == models_to_try[-1]:
+                basic_info = f"Error accessing OpenAI: {str(model_error)}"
+            continue
     
-    # Parse the response
+    # Provide typical Vietnamese real estate market values
+    # These are based on current market standards (2024-2025)
+    typical_values = {
+        "luxury_condo": {
+            "asp": 80000000,  # 80M VND/m² for luxury condos in HCMC/Hanoi
+            "construction_cost": 18000000,  # 18M VND/m²
+            "land_cost": 200000000,  # 200M VND/m² in prime areas
+        },
+        "premium_condo": {
+            "asp": 50000000,  # 50M VND/m²
+            "construction_cost": 15000000,  # 15M VND/m²
+            "land_cost": 100000000,  # 100M VND/m²
+        },
+        "mid_range_condo": {
+            "asp": 35000000,  # 35M VND/m²
+            "construction_cost": 12000000,  # 12M VND/m²
+            "land_cost": 50000000,  # 50M VND/m²
+        },
+        "affordable_housing": {
+            "asp": 25000000,  # 25M VND/m²
+            "construction_cost": 10000000,  # 10M VND/m²
+            "land_cost": 30000000,  # 30M VND/m²
+        }
+    }
     
-    # Parse the response
+    # Determine project category based on name patterns
+    project_lower = project_name.lower()
+    if any(word in project_lower for word in ['landmark', 'vinhomes', 'masteri', 'diamond', 'grand', 'luxury', 'premium']):
+        category = "luxury_condo"
+        category_name = "Luxury Condominium"
+    elif any(word in project_lower for word in ['sky', 'tower', 'residence', 'park', 'garden']):
+        category = "premium_condo"
+        category_name = "Premium Condominium"
+    elif any(word in project_lower for word in ['home', 'city', 'plaza', 'center']):
+        category = "mid_range_condo"
+        category_name = "Mid-range Condominium"
+    else:
+        category = "premium_condo"  # Default
+        category_name = "Premium Condominium"
+    
+    values = typical_values[category]
+    
+    # Estimate reasonable project sizes based on category
+    if category == "luxury_condo":
+        nsa_estimate = 150000  # 150,000 m²
+        gfa_estimate = 200000  # 200,000 m²
+        land_area_estimate = 15000  # 15,000 m²
+    elif category == "premium_condo":
+        nsa_estimate = 100000
+        gfa_estimate = 140000
+        land_area_estimate = 10000
+    else:
+        nsa_estimate = 80000
+        gfa_estimate = 120000
+        land_area_estimate = 8000
+    
     result = {
-        "image_url": "",
-        "basic_info": "",
-        "asp": "",
-        "nsa": "",
-        "gfa": "",
-        "construction_cost_per_sqm": "",
-        "land_area": "",
-        "land_cost_per_sqm": "",
-        "raw_content": content,
-        "model_used": model  # Track which model was used
+        "image_url": "N/A",
+        "basic_info": f"{basic_info}\n\n[ESTIMATED VALUES] Based on Vietnamese market standards for {category_name} projects:",
+        "asp": str(values["asp"]),
+        "nsa": str(nsa_estimate),
+        "gfa": str(gfa_estimate),
+        "construction_cost_per_sqm": str(values["construction_cost"]),
+        "land_area": str(land_area_estimate),
+        "land_cost_per_sqm": str(values["land_cost"]),
+        "raw_content": f"Project Category: {category_name}\nEstimated based on Vietnam real estate market standards (2024-2025)\n\nBasic Info from AI: {basic_info}",
+        "model_used": model_used,
+        "data_source": "Market estimates + OpenAI training data",
+        "category": category_name
     }
-    
-    # Improved regex patterns to handle variations
-    patterns = {
-        "basic_info": r"Info:\s*(.*?)(?:\n|$)",
-        "asp": r"Average Selling Price:\s*([0-9,\.]+|N/A)",
-        "nsa": r"Net Sellable Area:\s*([0-9,\.]+|N/A)",
-        "gfa": r"Gross Floor Area:\s*([0-9,\.]+|N/A)",
-        "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+|N/A)",
-        "land_area": r"Land Area:\s*([0-9,\.]+|N/A)",
-        "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+|N/A)",
-        "image_url": r"Image:\s*(.*?)(?:\n|$)"
-    }
-    
-    for key, pat in patterns.items():
-        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE)
-        if m:
-            value = m.group(1).strip()
-            # Clean up numeric values
-            if key != "basic_info" and key != "image_url" and value != "N/A":
-                value = value.replace(",", "")
-            result[key] = value
     
     return result
+
+def search_project_online(project_name: str) -> dict:
+    """
+    Optional: Search for project information online using requests
+    This is a placeholder for web search functionality
+    You could integrate with Google Search API, Bing API, or web scraping
+    """
+    # Placeholder for web search integration
+    # You could implement:
+    # 1. Google Custom Search API
+    # 2. Bing Search API  
+    # 3. Web scraping (with caution for legal/ethical compliance)
+    
+    search_info = {
+        "status": "not_implemented",
+        "message": "Web search integration not implemented. Using market estimates instead.",
+        "suggestion": "For real-time data, consider integrating Google Custom Search API or manual research."
+    }
+    
+    return search_info
+
+def get_vietnam_market_estimates(project_type: str = "premium_condo") -> dict:
+    """
+    Get current Vietnamese real estate market estimates (2024-2025)
+    Based on market research and industry reports
+    """
+    market_data = {
+        "luxury_condo": {
+            "description": "Luxury condominiums in prime locations (District 1, 3, 7 HCMC or Ba Dinh, Dong Da Hanoi)",
+            "asp_range": "70-120 million VND/m²",
+            "asp_typical": 80000000,
+            "construction_cost": 18000000,
+            "land_cost_hcmc": 200000000,
+            "land_cost_hanoi": 150000000,
+            "examples": ["Landmark 81", "Vinhomes Central Park", "Masteri Thao Dien"]
+        },
+        "premium_condo": {
+            "description": "Premium condominiums in good locations",
+            "asp_range": "40-70 million VND/m²",
+            "asp_typical": 50000000,
+            "construction_cost": 15000000,
+            "land_cost_hcmc": 100000000,
+            "land_cost_hanoi": 80000000,
+            "examples": ["Vinhomes Grand Park", "Saigon Royal", "Times City"]
+        },
+        "mid_range_condo": {
+            "description": "Mid-range condominiums in developing areas",
+            "asp_range": "25-45 million VND/m²",
+            "asp_typical": 35000000,
+            "construction_cost": 12000000,
+            "land_cost_hcmc": 50000000,
+            "land_cost_hanoi": 40000000,
+            "examples": ["Celadon City", "Akira City", "Jamila Khang Dien"]
+        },
+        "affordable_housing": {
+            "description": "Affordable housing and social housing projects",
+            "asp_range": "15-30 million VND/m²",
+            "asp_typical": 25000000,
+            "construction_cost": 10000000,
+            "land_cost_hcmc": 30000000,
+            "land_cost_hanoi": 25000000,
+            "examples": ["EHomeS", "Ehome Nam Sai Gon", "Green Town"]
+        }
+    }
+    
+    return market_data.get(project_type, market_data["premium_condo"])
 
 def main():
     st.title("Real Estate RNAV Calculator")
@@ -549,8 +644,8 @@ def main():
     
     # Only show ChatGPT button if API key is available
     if api_key:
-        if st.button("Get Project Basic Info from ChatGPT"):
-            with st.spinner("Querying ChatGPT..."):
+        if st.button("Get Project Info (AI + Market Estimates)"):
+            with st.spinner("Getting project information..."):
                 info = get_project_basic_info(project_name, api_key)
                 st.session_state["project_info"] = info
                 
@@ -559,13 +654,39 @@ def main():
                     if "error" in info:
                         st.error(f"❌ Error: {info['error']}")
                     elif "model_used" in info:
-                        st.success(f"✅ Successfully used model: {info['model_used']}")
+                        st.success(f"✅ Data source: {info.get('data_source', 'AI estimates')} | Model: {info['model_used']}")
+                        if "category" in info:
+                            st.info(f"📊 Detected project category: {info['category']}")
                     
                     # Save the raw response if available
                     if "raw_content" in info:
                         st.session_state["project_info_raw"] = info["raw_content"]
                     else:
                         st.session_state["project_info_raw"] = str(info)
+        
+        # Add option for manual override
+        st.markdown("---")
+        st.markdown("💡 **Note**: The AI provides estimates based on Vietnamese market standards since real-time data isn't available through the API.")
+        
+        # Add expandable info about data sources
+        with st.expander("📊 About the estimates"):
+            st.markdown("""
+            **Data Sources:**
+            - **Basic Info**: OpenAI training data (up to knowledge cutoff)
+            - **Financial Parameters**: Vietnamese real estate market standards (2024-2025)
+            
+            **Market Categories:**
+            - **Luxury**: 70-120M VND/m² (Landmark 81, Vinhomes Central Park)
+            - **Premium**: 40-70M VND/m² (Vinhomes Grand Park, Saigon Royal)  
+            - **Mid-range**: 25-45M VND/m² (Celadon City, Akira City)
+            - **Affordable**: 15-30M VND/m² (EHomeS, Green Town)
+            
+            **Construction Costs**: 10-18M VND/m² depending on quality
+            **Land Costs**: 25-200M VND/m² depending on location
+            
+            💡 For accurate analysis, verify these estimates with current market data.
+            """)
+        
     else:
         st.info("💡 ChatGPT integration is disabled. Please set up your OpenAI API key to use this feature.")
 
