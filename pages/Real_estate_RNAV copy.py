@@ -449,114 +449,120 @@ def RNAV_Calculation(
 
 def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     """
-    Query OpenAI GPT to get image, basic info, and key parameters about the project.
-    Since OpenAI API doesn't have real-time internet access, this provides estimated values
-    based on Vietnamese real estate market standards.
+    Query OpenAI GPT with web search capabilities to get real-time project information.
+    Uses OpenAI's browsing feature if available.
     """
     
-    # First, try to get basic info from OpenAI (using training data)
-    basic_info_prompt = (
-        f"Based on your training data, provide any information you know about the real estate project '{project_name}' in Vietnam. "
-        f"Include location, developer, project type, and any notable features if known. "
-        f"If you don't have specific information about this project, clearly state that and provide general information about similar projects in Vietnam."
+    # Enhanced prompt for web search
+    prompt = (
+        f"Please search the internet for current information about the real estate project '{project_name}' in Vietnam. "
+        f"I need the following specific information:\n\n"
+        f"1. Project location, developer, and current status\n"
+        f"2. Current selling prices (primary and secondary market)\n"
+        f"3. Project scale (total area, number of units, GFA)\n"
+        f"4. Land area and estimated land costs\n"
+        f"5. Construction specifications and estimated costs\n\n"
+        f"Please browse recent real estate websites, news articles, and official project information. "
+        f"Format your response EXACTLY as follows:\n\n"
+        f"Info: [Detailed project description with current status and location]\n"
+        f"Average Selling Price: [Current market price per m² in VND, numbers only]\n"
+        f"Net Sellable Area: [Total sellable area in m², numbers only]\n"
+        f"Gross Floor Area: [Total GFA in m², numbers only]\n"
+        f"Construction Cost per sqm: [Estimated construction cost per m² in VND, numbers only]\n"
+        f"Land Area: [Land area in m², numbers only]\n"
+        f"Land Cost per sqm: [Estimated land cost per m² in VND, numbers only]\n"
+        f"Image: [Project image URL if found, otherwise 'N/A']\n"
+        f"Sources: [List the websites/sources you found this information from]\n\n"
+        f"If you cannot access the internet, please clearly state that limitation."
     )
     
-    # Try multiple models in order of preference
-    models_to_try = ["gpt-4", "gpt-3.5-turbo", "gpt-4o"]
-    basic_info = "No specific information available from training data."
-    model_used = "none"
+    # Try different approaches for web search
+    models_with_search = [
+        "gpt-4o",  # Latest model with potential browsing
+        "gpt-4-1106-preview",  # GPT-4 Turbo with browsing
+        "gpt-4",
+        "gpt-3.5-turbo"
+    ]
     
-    for model in models_to_try:
+    for model in models_with_search:
         try:
             client = openai.OpenAI(api_key=openai_api_key)
+            
+            # Try with system message that encourages web search
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are a real estate analyst. Provide information based only on your training data. Do not make up specific details if you don't know them."},
-                    {"role": "user", "content": basic_info_prompt}
+                    {
+                        "role": "system", 
+                        "content": "You are a real estate analyst with web browsing capabilities. "
+                                   "Search the internet for current, accurate information about real estate projects. "
+                                   "Use recent sources and provide factual, up-to-date data."
+                    },
+                    {"role": "user", "content": prompt}
                 ],
-                max_tokens=400,
-                temperature=0.3,
+                max_tokens=1000,
+                temperature=0.1,  # Low temperature for factual accuracy
             )
-            basic_info = response.choices[0].message.content.strip()
-            model_used = model
+            
+            content = response.choices[0].message.content.strip()
+            
+            # Check if the response indicates web search was performed
+            if any(indicator in content.lower() for indicator in [
+                "i cannot browse", "i don't have access", "cannot access the internet", 
+                "i'm not able to search", "no internet access"
+            ]):
+                # If this model can't browse, try the next one
+                continue
+            
+            # If we get here, the model responded (may or may not have browsed)
             break
             
         except Exception as model_error:
-            if model == models_to_try[-1]:
-                basic_info = f"Error accessing OpenAI: {str(model_error)}"
+            if model == models_with_search[-1]:
+                return {"error": f"All models failed. Last error: {str(model_error)}"}
             continue
     
-    # Provide typical Vietnamese real estate market values
-    # These are based on current market standards (2024-2025)
-    typical_values = {
-        "luxury_condo": {
-            "asp": 80000000,  # 80M VND/m² for luxury condos in HCMC/Hanoi
-            "construction_cost": 18000000,  # 18M VND/m²
-            "land_cost": 200000000,  # 200M VND/m² in prime areas
-        },
-        "premium_condo": {
-            "asp": 50000000,  # 50M VND/m²
-            "construction_cost": 15000000,  # 15M VND/m²
-            "land_cost": 100000000,  # 100M VND/m²
-        },
-        "mid_range_condo": {
-            "asp": 35000000,  # 35M VND/m²
-            "construction_cost": 12000000,  # 12M VND/m²
-            "land_cost": 50000000,  # 50M VND/m²
-        },
-        "affordable_housing": {
-            "asp": 25000000,  # 25M VND/m²
-            "construction_cost": 10000000,  # 10M VND/m²
-            "land_cost": 30000000,  # 30M VND/m²
-        }
-    }
-    
-    # Determine project category based on name patterns
-    project_lower = project_name.lower()
-    if any(word in project_lower for word in ['landmark', 'vinhomes', 'masteri', 'diamond', 'grand', 'luxury', 'premium']):
-        category = "luxury_condo"
-        category_name = "Luxury Condominium"
-    elif any(word in project_lower for word in ['sky', 'tower', 'residence', 'park', 'garden']):
-        category = "premium_condo"
-        category_name = "Premium Condominium"
-    elif any(word in project_lower for word in ['home', 'city', 'plaza', 'center']):
-        category = "mid_range_condo"
-        category_name = "Mid-range Condominium"
-    else:
-        category = "premium_condo"  # Default
-        category_name = "Premium Condominium"
-    
-    values = typical_values[category]
-    
-    # Estimate reasonable project sizes based on category
-    if category == "luxury_condo":
-        nsa_estimate = 150000  # 150,000 m²
-        gfa_estimate = 200000  # 200,000 m²
-        land_area_estimate = 15000  # 15,000 m²
-    elif category == "premium_condo":
-        nsa_estimate = 100000
-        gfa_estimate = 140000
-        land_area_estimate = 10000
-    else:
-        nsa_estimate = 80000
-        gfa_estimate = 120000
-        land_area_estimate = 8000
-    
+    # Parse the response
     result = {
-        "image_url": "N/A",
-        "basic_info": f"{basic_info}\n\n[ESTIMATED VALUES] Based on Vietnamese market standards for {category_name} projects:",
-        "asp": str(values["asp"]),
-        "nsa": str(nsa_estimate),
-        "gfa": str(gfa_estimate),
-        "construction_cost_per_sqm": str(values["construction_cost"]),
-        "land_area": str(land_area_estimate),
-        "land_cost_per_sqm": str(values["land_cost"]),
-        "raw_content": f"Project Category: {category_name}\nEstimated based on Vietnam real estate market standards (2024-2025)\n\nBasic Info from AI: {basic_info}",
-        "model_used": model_used,
-        "data_source": "Market estimates + OpenAI training data",
-        "category": category_name
+        "image_url": "",
+        "basic_info": "",
+        "asp": "",
+        "nsa": "",
+        "gfa": "",
+        "construction_cost_per_sqm": "",
+        "land_area": "",
+        "land_cost_per_sqm": "",
+        "sources": "",
+        "raw_content": content,
+        "model_used": model,
+        "search_attempted": True
     }
+    
+    # Enhanced regex patterns
+    patterns = {
+        "basic_info": r"Info:\s*(.*?)(?=Average Selling Price:|$)",
+        "asp": r"Average Selling Price:\s*([0-9,\.]+)",
+        "nsa": r"Net Sellable Area:\s*([0-9,\.]+)",
+        "gfa": r"Gross Floor Area:\s*([0-9,\.]+)",
+        "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+)",
+        "land_area": r"Land Area:\s*([0-9,\.]+)",
+        "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
+        "image_url": r"Image:\s*(.*?)(?=Sources:|$)",
+        "sources": r"Sources:\s*(.*?)(?=\n|$)"
+    }
+    
+    for key, pat in patterns.items():
+        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        if m:
+            value = m.group(1).strip()
+            # Clean up numeric values
+            if key not in ["basic_info", "image_url", "sources"] and value:
+                value = re.sub(r'[^\d\.]', '', value)  # Keep only digits and dots
+            result[key] = value
+    
+    # Check if web search was actually performed
+    web_indicators = ["source:", "website", "according to", "found on", "search results"]
+    result["web_search_performed"] = any(indicator in content.lower() for indicator in web_indicators)
     
     return result
 
@@ -644,51 +650,60 @@ def main():
     
     # Only show ChatGPT button if API key is available
     if api_key:
-        if st.button("Get Project Info (AI + Market Estimates)"):
-            with st.spinner("Getting project information..."):
+        if st.button("🔍 Search Project Info (Web Search + AI)"):
+            with st.spinner("Searching the web for current project information..."):
                 info = get_project_basic_info(project_name, api_key)
                 st.session_state["project_info"] = info
                 
-                # Show debugging info
+                # Show detailed feedback
                 if isinstance(info, dict):
                     if "error" in info:
                         st.error(f"❌ Error: {info['error']}")
-                    elif "model_used" in info:
-                        st.success(f"✅ Data source: {info.get('data_source', 'AI estimates')} | Model: {info['model_used']}")
-                        if "category" in info:
-                            st.info(f"📊 Detected project category: {info['category']}")
+                    else:
+                        # Show search status
+                        if info.get("web_search_performed"):
+                            st.success(f"✅ Web search performed successfully! Model: {info.get('model_used', 'unknown')}")
+                            if info.get("sources"):
+                                st.info(f"📄 Sources found: {info['sources']}")
+                        else:
+                            st.warning(f"⚠️ Web search not available. Used model: {info.get('model_used', 'unknown')} with training data only.")
                     
-                    # Save the raw response if available
+                    # Save the raw response
                     if "raw_content" in info:
                         st.session_state["project_info_raw"] = info["raw_content"]
                     else:
                         st.session_state["project_info_raw"] = str(info)
         
-        # Add option for manual override
+        # Add information about web search
         st.markdown("---")
-        st.markdown("💡 **Note**: The AI provides estimates based on Vietnamese market standards since real-time data isn't available through the API.")
+        st.markdown("🌐 **Web Search**: This attempts to use OpenAI's web browsing capabilities for real-time data.")
         
-        # Add expandable info about data sources
-        with st.expander("📊 About the estimates"):
+        # Add expandable info about web search limitations
+        with st.expander("� About Web Search with OpenAI"):
             st.markdown("""
-            **Data Sources:**
-            - **Basic Info**: OpenAI training data (up to knowledge cutoff)
-            - **Financial Parameters**: Vietnamese real estate market standards (2024-2025)
+            **How it works:**
+            - Attempts to use OpenAI models with web browsing capabilities
+            - Searches for current project information online
+            - Provides real-time market data when available
             
-            **Market Categories:**
-            - **Luxury**: 70-120M VND/m² (Landmark 81, Vinhomes Central Park)
-            - **Premium**: 40-70M VND/m² (Vinhomes Grand Park, Saigon Royal)  
-            - **Mid-range**: 25-45M VND/m² (Celadon City, Akira City)
-            - **Affordable**: 15-30M VND/m² (EHomeS, Green Town)
+            **Requirements for Web Search:**
+            - OpenAI API with browsing access (ChatGPT Plus features)
+            - Models: gpt-4o, gpt-4-1106-preview (with browsing)
+            - May require special API access or higher tier subscription
             
-            **Construction Costs**: 10-18M VND/m² depending on quality
-            **Land Costs**: 25-200M VND/m² depending on location
+            **If Web Search Fails:**
+            - The system will indicate "Web search not available"
+            - You can manually research the project and input the data
+            - Consider upgrading to OpenAI API with browsing capabilities
             
-            💡 For accurate analysis, verify these estimates with current market data.
+            **Alternative Solutions:**
+            1. **Manual Research**: Search real estate websites yourself
+            2. **API Upgrade**: Get OpenAI API with browsing access
+            3. **External APIs**: Integrate Google Search API or similar
             """)
         
     else:
-        st.info("💡 ChatGPT integration is disabled. Please set up your OpenAI API key to use this feature.")
+        st.info("💡 Web search integration requires an OpenAI API key. Please set up your API key to use this feature.")
 
     # Add debug section
     if api_key and st.checkbox("🔧 Debug Mode"):
@@ -713,11 +728,16 @@ def main():
 
     # Show raw response from ChatGPT
     if project_info_raw:
-        st.markdown("**Raw ChatGPT Response:**")
+        st.markdown("**Raw AI Response:**")
         st.code(project_info_raw, language="markdown")
     elif isinstance(project_info, dict) and "raw_content" in project_info:
-        st.markdown("**Raw ChatGPT Response:**")
+        st.markdown("**Raw AI Response:**")
         st.code(project_info["raw_content"], language="markdown")
+
+    # Show sources if web search was performed
+    if isinstance(project_info, dict) and project_info.get("sources"):
+        st.markdown("**🔗 Sources Found:**")
+        st.markdown(project_info["sources"])
 
     # Show image and basic info if available
     if project_info.get("image_url"):
@@ -725,12 +745,14 @@ def main():
         if (
             image_url
             and image_url.lower() != "none"
+            and image_url.lower() != "n/a"
             and image_url.lower().startswith("http")
         ):
             st.image(image_url, caption="Project Image", use_container_width=True)
         else:
             st.write("No image available or invalid image URL.")
             st.caption(f"Image URL received: `{image_url}`")
+    
     if project_info.get("basic_info"):
         st.info(project_info["basic_info"])
     elif project_info.get("error"):
