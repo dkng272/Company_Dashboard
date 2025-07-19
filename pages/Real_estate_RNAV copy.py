@@ -11,23 +11,23 @@ import openai
 
 print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
 
-# Load .env file
+# Load .env file (for local development)
 load_dotenv()
 
 # Read API key from environment
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
-    st.error(
-        "OPENAI_API_KEY environment variable is not set.\n\n"
-        "How to fix:\n"
-        "1. Create a file named `.env` in your project root directory (the folder where you run Streamlit).\n"
-        "2. Add this line to the file (replace with your actual key):\n"
-        "   OPENAI_API_KEY=your_openai_api_key_here\n"
-        "3. Save the file and restart the Streamlit app.\n\n"
-        "Example path for your setup:\n"
-        "c:\\Users\\Admin\\Dropbox\\Vietnam\\Dragon Capital\\AI_Home\\Company_Dashboard\\.env"
+    st.warning(
+        "⚠️ OPENAI_API_KEY environment variable is not set.\n\n"
+        "**For local development:**\n"
+        "1. Create a file named `.env` in your project root directory\n"
+        "2. Add this line: `OPENAI_API_KEY=your_openai_api_key_here`\n\n"
+        "**For Streamlit Cloud deployment:**\n"
+        "1. Go to your app settings in Streamlit Cloud\n"
+        "2. Add OPENAI_API_KEY as a secret in the 'Secrets' section\n\n"
+        "⚡ You can still use the calculator without ChatGPT integration!"
     )
-    st.stop()
+    api_key = None  # Allow app to continue without API key
 
 #%%
 def selling_progress_schedule(
@@ -513,28 +513,34 @@ def main():
     # Add project name input
     project_name = st.text_input("Project Name", value="My Project")
 
-    # Set your OpenAI API key directly here (replace with your actual key)
-    openai.api_key = api_key
+    # Set your OpenAI API key if available
+    if api_key:
+        openai.api_key = api_key
 
     # Add button to get project info from ChatGPT
     if "project_info" not in st.session_state:
         st.session_state["project_info"] = {}
     if "project_info_raw" not in st.session_state:
         st.session_state["project_info_raw"] = ""
-    if st.button("Get Project Basic Info from ChatGPT"):
-        with st.spinner("Querying ChatGPT..."):
-            info = get_project_basic_info(project_name, api_key)
-            st.session_state["project_info"] = info
-            # Save the raw response if available
-            if isinstance(info, dict) and "error" not in info and hasattr(info, "raw_content"):
-                st.session_state["project_info_raw"] = info["raw_content"]
-            elif isinstance(info, dict) and "raw_content" in info:
-                st.session_state["project_info_raw"] = info["raw_content"]
-            elif isinstance(info, dict) and "error" not in info and "raw" in info:
-                st.session_state["project_info_raw"] = info["raw"]
-            else:
-                # fallback: try to get the raw content from the last OpenAI call
-                st.session_state["project_info_raw"] = info.get("raw_content", "")
+    
+    # Only show ChatGPT button if API key is available
+    if api_key:
+        if st.button("Get Project Basic Info from ChatGPT"):
+            with st.spinner("Querying ChatGPT..."):
+                info = get_project_basic_info(project_name, api_key)
+                st.session_state["project_info"] = info
+                # Save the raw response if available
+                if isinstance(info, dict) and "error" not in info and hasattr(info, "raw_content"):
+                    st.session_state["project_info_raw"] = info["raw_content"]
+                elif isinstance(info, dict) and "raw_content" in info:
+                    st.session_state["project_info_raw"] = info["raw_content"]
+                elif isinstance(info, dict) and "error" not in info and "raw" in info:
+                    st.session_state["project_info_raw"] = info["raw"]
+                else:
+                    # fallback: try to get the raw content from the last OpenAI call
+                    st.session_state["project_info_raw"] = info.get("raw_content", "")
+    else:
+        st.info("💡 ChatGPT integration is disabled. Please set up your OpenAI API key to use this feature.")
 
     project_info = st.session_state.get("project_info", {})
     project_info_raw = st.session_state.get("project_info_raw", "")
