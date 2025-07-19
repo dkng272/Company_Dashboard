@@ -1,7 +1,33 @@
 #%%
 import pandas as pd
 import streamlit as st
+import numpy as np
+from dotenv import load_dotenv
+import os
+import re
 
+# Optional: If openai is not installed, run: pip install openai
+import openai
+
+print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
+
+# Load .env file
+load_dotenv()
+
+# Read API key from environment
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    st.error(
+        "OPENAI_API_KEY environment variable is not set.\n\n"
+        "How to fix:\n"
+        "1. Create a file named `.env` in your project root directory (the folder where you run Streamlit).\n"
+        "2. Add this line to the file (replace with your actual key):\n"
+        "   OPENAI_API_KEY=your_openai_api_key_here\n"
+        "3. Save the file and restart the Streamlit app.\n\n"
+        "Example path for your setup:\n"
+        "c:\\Users\\Admin\\Dropbox\\Vietnam\\Dragon Capital\\AI_Home\\Company_Dashboard\\.env"
+    )
+    st.stop()
 
 #%%
 def selling_progress_schedule(
@@ -169,7 +195,6 @@ def construction_payment_schedule(
 #     start_year = 2026
 #     num_years = 4
 #     complete_year = 2030
-
 #     result = construction_payment_schedule(gfa * cost_per_sqm, current_year, start_year, num_years, complete_year)
 
 #     for i, value in enumerate(result):
@@ -378,7 +403,7 @@ def RNAV_Calculation(
 
     df = pd.DataFrame(data)
     df.loc["Total"] = df[["Discounted Cash Flow"]].sum(numeric_only=True)
-    df.at["Total", "Year Index"] = "RNAV"
+    df.at["Total", "Year Index"] = np.nan  # Use np.nan instead of "RNAV"
     return df
 
 
@@ -422,19 +447,202 @@ def RNAV_Calculation(
 
 # %%
 
+def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
+    """
+    Query OpenAI GPT to get image, basic info, and key parameters about the project.
+    Returns a dict with keys: image_url, basic_info, asp, nsa, gfa, construction_cost_per_sqm, land_area, land_cost_per_sqm
+    """
+    prompt = (
+        f"First, provide a brief summary of the real estate project named '{project_name}' (location, type, notable features). "
+        "Second, find the average selling price (ASP) of the project. If there is no primary ASP, use the secondary ASP. "
+        "If the ASP is a range, calculate and return the mean of the range. "
+        "Return only the mean value as a number (no units, no commas) for the ASP. "
+        "Format your answer as:\n"
+        "Info: <basic_info>\n"
+        "Average Selling Price: <asp>\n"
+        "Net Sellable Area: <nsa>\n"
+        "Gross Floor Area: <gfa>\n"
+        "Construction Cost per sqm: <construction_cost>\n"
+        "Land Area: <land_area>\n"
+        "Land Cost per sqm: <land_cost>\n"
+        "Image: <image_url>\n"
+    )
+    try:
+        # Pass api_key explicitly as required by openai.OpenAI
+        client = openai.OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=400,
+            temperature=0.7,
+        )
+        content = response.choices[0].message.content.strip()
+        # Parse the response
+        result = {
+            "image_url": "",
+            "basic_info": "",
+            "asp": "",
+            "nsa": "",
+            "gfa": "",
+            "construction_cost_per_sqm": "",
+            "land_area": "",
+            "land_cost_per_sqm": "",
+            "raw_content": content  # <-- Add this line
+        }
+        patterns = {
+            "basic_info": r"Info:\s*(.*)",
+            "asp": r"Average Selling Price:\s*([0-9\.]+)",
+            "nsa": r"Net Sellable Area:\s*([0-9,\.]+)",
+            "gfa": r"Gross Floor Area:\s*([0-9,\.]+)",
+            "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+)",
+            "land_area": r"Land Area:\s*([0-9,\.]+)",
+            "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
+            "image_url": r"Image:\s*(.*)"
+        }
+        for key, pat in patterns.items():
+            m = re.search(pat, content)
+            if m:
+                result[key] = m.group(1).strip()
+        return result
+    except Exception as e:
+        return {"error": f"Error fetching project info: {e}"}
+
 def main():
     st.title("Real Estate RNAV Calculator")
 
-    st.header("Project Parameters")
-    nsa = st.number_input("Net Sellable Area (m²)", value=265_295)
-    asp = st.number_input("Average Selling Price (VND/m²)", value=120_000_000)
-    gfa = st.number_input("Gross Floor Area (m²)", value=300_000)
-    construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=20_000_000)
-    land_area = st.number_input("Land Area (m²)", value=67_143)
-    land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=48_500_000)
-    sga_as_percent = st.number_input("SG&A as % of Revenue", min_value=0.0, max_value=1.0, value=0.08, step=0.01)
-    wacc_rate = st.number_input("WACC (Discount Rate, e.g. 0.12 for 12%)", min_value=0.0, max_value=1.0, value=0.12, step=0.01)
+    # Add project name input
+    project_name = st.text_input("Project Name", value="My Project")
 
+    # Set your OpenAI API key directly here (replace with your actual key)
+    openai.api_key = api_key
+
+    # Add button to get project info from ChatGPT
+    if "project_info" not in st.session_state:
+        st.session_state["project_info"] = {}
+    if "project_info_raw" not in st.session_state:
+        st.session_state["project_info_raw"] = ""
+    if st.button("Get Project Basic Info from ChatGPT"):
+        with st.spinner("Querying ChatGPT..."):
+            info = get_project_basic_info(project_name, api_key)
+            st.session_state["project_info"] = info
+            # Save the raw response if available
+            if isinstance(info, dict) and "error" not in info and hasattr(info, "raw_content"):
+                st.session_state["project_info_raw"] = info["raw_content"]
+            elif isinstance(info, dict) and "raw_content" in info:
+                st.session_state["project_info_raw"] = info["raw_content"]
+            elif isinstance(info, dict) and "error" not in info and "raw" in info:
+                st.session_state["project_info_raw"] = info["raw"]
+            else:
+                # fallback: try to get the raw content from the last OpenAI call
+                st.session_state["project_info_raw"] = info.get("raw_content", "")
+
+    project_info = st.session_state.get("project_info", {})
+    project_info_raw = st.session_state.get("project_info_raw", "")
+
+    # Ensure project_info is always a dict
+    if not isinstance(project_info, dict):
+        project_info = {}
+
+    # Show raw response from ChatGPT
+    if project_info_raw:
+        st.markdown("**Raw ChatGPT Response:**")
+        st.code(project_info_raw, language="markdown")
+    elif isinstance(project_info, dict) and "raw_content" in project_info:
+        st.markdown("**Raw ChatGPT Response:**")
+        st.code(project_info["raw_content"], language="markdown")
+
+    # Show image and basic info if available
+    if project_info.get("image_url"):
+        image_url = str(project_info["image_url"]).strip()
+        if (
+            image_url
+            and image_url.lower() != "none"
+            and image_url.lower().startswith("http")
+        ):
+            st.image(image_url, caption="Project Image", use_container_width=True)
+        else:
+            st.write("No image available or invalid image URL.")
+            st.caption(f"Image URL received: `{image_url}`")
+    if project_info.get("basic_info"):
+        st.info(project_info["basic_info"])
+    elif project_info.get("error"):
+        st.error(project_info["error"])
+
+    # Helper to parse float or fallback to default
+    def parse_float(val, default):
+        try:
+            return float(str(val).replace(",", "").replace(".", "")) if val else default
+        except Exception:
+            return default
+
+    # Suggestion values from ChatGPT
+    nsa_suggest = project_info.get("nsa", "")
+    asp_suggest = project_info.get("asp", "")
+    gfa_suggest = project_info.get("gfa", "")
+    construction_cost_suggest = project_info.get("construction_cost_per_sqm", "")
+    land_area_suggest = project_info.get("land_area", "")
+    land_cost_suggest = project_info.get("land_cost_per_sqm", "")
+
+    st.header("Project Parameters")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 265_295), key="nsa")
+    with col2:
+        st.markdown(f"ChatGPT suggestion: **{nsa_suggest}**" if nsa_suggest else "ChatGPT suggestion: _none_")
+        if nsa_suggest:
+            if st.button("Copy", key="copy_nsa"):
+                st.warning("Please manually copy the suggested value into the textbox above. (Streamlit does not allow programmatic update after widget creation.)")
+
+    col3, col4 = st.columns([3, 1])
+    with col3:
+        asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 120_000_000), key="asp")
+    with col4:
+        st.markdown(f"ChatGPT suggestion: **{asp_suggest}**" if asp_suggest else "ChatGPT suggestion: _none_")
+        if asp_suggest:
+            if st.button("Copy", key="copy_asp"):
+                st.warning("Please manually copy the suggested value into the textbox above.")
+
+    col5, col6 = st.columns([3, 1])
+    with col5:
+        gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
+    with col6:
+        st.markdown(f"ChatGPT suggestion: **{gfa_suggest}**" if gfa_suggest else "ChatGPT suggestion: _none_")
+        if gfa_suggest:
+            if st.button("Copy", key="copy_gfa"):
+                st.warning("Please manually copy the suggested value into the textbox above.")
+
+    col7, col8 = st.columns([3, 1])
+    with col7:
+        construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
+    with col8:
+        st.markdown(f"ChatGPT suggestion: **{construction_cost_suggest}**" if construction_cost_suggest else "ChatGPT suggestion: _none_")
+        if construction_cost_suggest:
+            if st.button("Copy", key="copy_construction_cost"):
+                st.warning("Please manually copy the suggested value into the textbox above.")
+
+    col9, col10 = st.columns([3, 1])
+    with col9:
+        land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 67_143), key="land_area")
+    with col10:
+        st.markdown(f"ChatGPT suggestion: **{land_area_suggest}**" if land_area_suggest else "ChatGPT suggestion: _none_")
+        if land_area_suggest:
+            if st.button("Copy", key="copy_land_area"):
+                st.warning("Please manually copy the suggested value into the textbox above.")
+
+    col11, col12 = st.columns([3, 1])
+    with col11:
+        land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 48_500_000), key="land_cost_per_sqm")
+    with col12:
+        st.markdown(f"ChatGPT suggestion: **{land_cost_suggest}**" if land_cost_suggest else "ChatGPT suggestion: _none_")
+        if land_cost_suggest:
+            if st.button("Copy", key="copy_land_cost"):
+                st.warning("Please manually copy the suggested value into the textbox above.")
+
+    # Button to copy all suggested values
+    if st.button("Copy All Suggested Values"):
+        st.warning("Please manually copy the suggested values into the textboxes above. (Streamlit does not allow programmatic update after widget creation.)")
+
+    # ...existing code for timeline, calculations, and outputs...
     st.header("Timeline")
     current_year = st.number_input("Current Year", value=2025)
     start_year = st.number_input("Construction/Sales Start Year", value=2025)
@@ -446,7 +654,8 @@ def main():
     total_revenue = nsa * asp
     total_construction_cost = gfa * construction_cost_per_sqm
     total_land_cost = land_area * land_cost_per_sqm
-    total_sga_cost = total_revenue * sga_as_percent
+    total_sga_cost = total_revenue * st.number_input("SG&A as % of Revenue", min_value=0.0, max_value=1.0, value=0.08, step=0.01)
+    wacc_rate = st.number_input("WACC (Discount Rate, e.g. 0.12 for 12%)", min_value=0.0, max_value=1.0, value=0.12, step=0.01)
 
     st.subheader("Calculated Totals")
     st.write(f"**Total Revenue:** {total_revenue:,.0f} VND")
@@ -454,7 +663,7 @@ def main():
     st.write(f"**Total Land Cost:** {total_land_cost:,.0f} VND")
     st.write(f"**Total SG&A:** {total_sga_cost:,.0f} VND")
 
-    # Generate schedules
+    # ...existing code for schedules and outputs...
     selling_progress = selling_progress_schedule(
         total_revenue, int(current_year), int(start_year), int(num_years), int(complete_year)
     )
@@ -478,6 +687,8 @@ def main():
         selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate
     )
 
+    st.header(f"Project: {project_name}")
+
     st.header("P&L Schedule")
     st.dataframe(df_pnl)
 
@@ -491,10 +702,11 @@ def main():
     st.write(f"{df_rnav.loc['Total', 'Discounted Cash Flow']:,.0f} VND")
 
     st.header("Cash Flow Chart")
-    st.line_chart(df_rnav[["Net Cash Flow", "Discounted Cash Flow"]].drop("Total", errors="ignore"))
+    st.line_chart(df_rnav[df_rnav["Year Index"].notna()][["Net Cash Flow", "Discounted Cash Flow"]])
 
 # Remove or comment out all previous if __name__ == "__main__": blocks
 # ...existing code for all function definitions...
 
 if __name__ == "__main__":
     main()
+
