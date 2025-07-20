@@ -156,7 +156,7 @@ def land_use_right_payment_schedule_single_year(
         pass
     else:
         payment_index = payment_year - current_year
-        payment_array[payment_index] = -total_payment
+        payment_array[payment_index] = total_payment
 
     return payment_array
 
@@ -206,7 +206,7 @@ def construction_payment_schedule(
     if (start_year + num_years - 1) > complete_year:
         raise ValueError("Construction period exceeds project completion year")
 
-    annual_cost = -total_cost / num_years
+    annual_cost = total_cost / num_years
 
     # Create timeline from current_year to complete_year
     full_years = list(range(current_year, complete_year + 1))
@@ -312,13 +312,14 @@ def generate_pnl_schedule(
     Args:
         total_revenue (float): Total revenue (VND)
         total_land_payment (float): Total land use cost (VND)
+        total_construction_payment (float): Total construction payment (VND)
         total_sga (float): Total SG&A (VND)
         current_year (int): First year of the model
         start_booking_year (int): Year revenue starts
         end_booking_year (int): Year revenue ends
 
     Returns:
-        pd.DataFrame: Year-by-year P&L table from current_year to end_booking_year
+        pd.DataFrame: Year-by-year P&L table from current_year to end_booking_year with totals row
     """
     if start_booking_year <= current_year - 1:
         raise ValueError("start_booking_year must be greater than current_year")
@@ -327,9 +328,9 @@ def generate_pnl_schedule(
 
     num_booking_years = end_booking_year - start_booking_year + 1
     revenue_annual = total_revenue / num_booking_years
-    land_payment_annual = -total_land_payment / num_booking_years
-    sga_annual = -total_sga / num_booking_years
-    construction_annual = -total_construction_payment / num_booking_years
+    land_payment_annual = total_land_payment / num_booking_years
+    sga_annual = total_sga / num_booking_years
+    construction_annual = total_construction_payment / num_booking_years
 
     pnl_data = []
     for year in range(current_year, end_booking_year + 1):
@@ -355,7 +356,24 @@ def generate_pnl_schedule(
             "Profit After Tax": pat
         })
 
-    return pd.DataFrame(pnl_data)
+    df = pd.DataFrame(pnl_data)
+    
+    # Add total row
+    total_row = {
+        "Year": "Total",
+        "Revenue": df["Revenue"].sum(),
+        "Land Payment": df["Land Payment"].sum(),
+        "Construction": df["Construction"].sum(),
+        "SG&A": df["SG&A"].sum(),
+        "Profit Before Tax": df["Profit Before Tax"].sum(),
+        "Tax Expense (20%)": df["Tax Expense (20%)"].sum(),
+        "Profit After Tax": df["Profit After Tax"].sum()
+    }
+    
+    # Use pd.concat instead of deprecated append
+    df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+
+    return df
 
 
 # 🔄 Example usage:
@@ -383,7 +401,8 @@ def RNAV_Calculation(
     sga_payment_schedule: list,
     tax_expense_schedule: list,
     land_use_right_payment_schedule: list,
-    wacc: float
+    wacc: float,
+    current_year: int
 ) -> pd.DataFrame:
     """
     Calculate RNAV using discounted cash flow method.
@@ -395,6 +414,7 @@ def RNAV_Calculation(
         tax_expense_schedule (list of float): Tax expense per year
         land_use_right_payment_schedule (list of float): Land use right payments per year
         wacc (float): Discount rate (e.g. 0.12 for 12%)
+        current_year (int): Starting year for the analysis
 
     Returns:
         pd.DataFrame: Year-by-year cash flows and total discounted RNAV
@@ -413,6 +433,7 @@ def RNAV_Calculation(
     data = []
     total_rnav = 0.0
     for i in range(n):
+        year = current_year + i
         inflow = selling_progress_schedule[i]
         outflow = (
             construction_payment_schedule[i]
@@ -420,12 +441,13 @@ def RNAV_Calculation(
             + tax_expense_schedule[i]
             + land_use_right_payment_schedule[i]
         )
-        net_cashflow = inflow - outflow
+        net_cashflow = inflow + outflow
         discount_factor = 1 / ((1 + wacc) ** i)
         discounted_cashflow = net_cashflow * discount_factor
         total_rnav += discounted_cashflow
 
         data.append({
+            "Year": year,
             "Year Index": i,
             "Inflow (Selling Revenue)": inflow,
             "Outflow (Cost + SG&A + Tax + Land)": outflow,
@@ -436,7 +458,8 @@ def RNAV_Calculation(
 
     df = pd.DataFrame(data)
     df.loc["Total"] = df[["Discounted Cash Flow"]].sum(numeric_only=True)
-    df.at["Total", "Year Index"] = np.nan  # Use np.nan instead of "RNAV"
+    df.at["Total", "Year"] = "Total"
+    df.at["Total", "Year Index"] = np.nan
     return df
 
 
@@ -715,52 +738,6 @@ def search_project_online(project_name: str) -> dict:
             "error_type": type(e).__name__
         }
 
-def get_vietnam_market_estimates(project_type: str = "premium_condo") -> dict:
-    """
-    Get current Vietnamese real estate market estimates (2024-2025)
-    Based on market research and industry reports
-    """
-    market_data = {
-        "luxury_condo": {
-            "description": "Luxury condominiums in prime locations (District 1, 3, 7 HCMC or Ba Dinh, Dong Da Hanoi)",
-            "asp_range": "70-120 million VND/m²",
-            "asp_typical": 80000000,
-            "construction_cost": 18000000,
-            "land_cost_hcmc": 200000000,
-            "land_cost_hanoi": 150000000,
-            "examples": ["Landmark 81", "Vinhomes Central Park", "Masteri Thao Dien"]
-        },
-        "premium_condo": {
-            "description": "Premium condominiums in good locations",
-            "asp_range": "40-70 million VND/m²",
-            "asp_typical": 50000000,
-            "construction_cost": 15000000,
-            "land_cost_hcmc": 100000000,
-            "land_cost_hanoi": 80000000,
-            "examples": ["Vinhomes Grand Park", "Saigon Royal", "Times City"]
-        },
-        "mid_range_condo": {
-            "description": "Mid-range condominiums in developing areas",
-            "asp_range": "25-45 million VND/m²",
-            "asp_typical": 35000000,
-            "construction_cost": 12000000,
-            "land_cost_hcmc": 50000000,
-            "land_cost_hanoi": 40000000,
-            "examples": ["Celadon City", "Akira City", "Jamila Khang Dien"]
-        },
-        "affordable_housing": {
-            "description": "Affordable housing and social housing projects",
-            "asp_range": "15-30 million VND/m²",
-            "asp_typical": 25000000,
-            "construction_cost": 10000000,
-            "land_cost_hcmc": 30000000,
-            "land_cost_hanoi": 25000000,
-            "examples": ["EHomeS", "Ehome Nam Sai Gon", "Green Town"]
-        }
-    }
-    
-    return market_data.get(project_type, market_data["premium_condo"])
-
 
 def main():
     st.title("Real Estate RNAV Calculator")
@@ -872,13 +849,13 @@ def main():
         st.header("Project Parameters")
         col1, col2 = st.columns([3, 1])
         with col1:
-            nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 265_295), key="nsa")
+            nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 200_000), key="nsa")
         with col2:
             st.markdown(f"AI suggestion: **{nsa_suggest}**" if nsa_suggest else "AI suggestion: _none_")
 
         col3, col4 = st.columns([3, 1])
         with col3:
-            asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 120_000_000), key="asp")
+            asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 100_000_000), key="asp")
         with col4:
             st.markdown(f"AI suggestion: **{asp_suggest}**" if asp_suggest else "AI suggestion: _none_")
 
@@ -896,13 +873,13 @@ def main():
 
         col9, col10 = st.columns([3, 1])
         with col9:
-            land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 67_143), key="land_area")
+            land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 50_000), key="land_area")
         with col10:
             st.markdown(f"AI suggestion: **{land_area_suggest}**" if land_area_suggest else "AI suggestion: _none_")
 
         col11, col12 = st.columns([3, 1])
         with col11:
-            land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 48_500_000), key="land_cost_per_sqm")
+            land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 50_000_000), key="land_cost_per_sqm")
         with col12:
             st.markdown(f"AI suggestion: **{land_cost_suggest}**" if land_cost_suggest else "AI suggestion: _none_")
 
@@ -924,54 +901,128 @@ def main():
 
     # Calculate totals
     total_revenue = nsa * asp
-    total_construction_cost = gfa * construction_cost_per_sqm
-    total_land_cost = land_area * land_cost_per_sqm
-    total_sga_cost = total_revenue * sga_percent
+    total_construction_cost = -gfa * construction_cost_per_sqm
+    total_land_cost = -land_area * land_cost_per_sqm
+    total_sga_cost = -total_revenue * sga_percent
+    total_estimated_PBT = total_revenue + total_land_cost + total_construction_cost + total_sga_cost
+    total_estimated_PAT = total_estimated_PBT * 0.8  # Assuming 20% tax rate
 
     st.subheader("Calculated Totals")
     st.write(f"**Total Revenue:** {format_vnd_billions(total_revenue)}")
     st.write(f"**Total Construction Cost:** {format_vnd_billions(total_construction_cost)}")
     st.write(f"**Total Land Cost:** {format_vnd_billions(total_land_cost)}")
     st.write(f"**Total SG&A:** {format_vnd_billions(total_sga_cost)}")
+    st.write(f"**Total Estimated PBT:** {format_vnd_billions(total_estimated_PBT)}")
+    st.write(f"**Total Estimated PAT:** {format_vnd_billions(total_estimated_PAT)}")
 
     # ...existing code for schedules and outputs...
     selling_progress = selling_progress_schedule(
-        total_revenue, int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_revenue/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
     )
     sga_payment = sga_payment_schedule(
-        total_sga_cost, int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_sga_cost/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
     )
     construction_payment = construction_payment_schedule(
-        total_construction_cost, int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_construction_cost/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
     )
     land_use_right_payment = land_use_right_payment_schedule_single_year(
-        total_land_cost, int(current_year), int(start_year), int(complete_year)
+        total_land_cost/(10**9), int(current_year), int(start_year), int(complete_year)
     )
 
     df_pnl = generate_pnl_schedule(
-        total_revenue, total_land_cost, total_construction_cost, total_sga_cost,
+        total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
         int(start_year), int(start_booking_year), int(complete_year)
     )
-    tax_expense = df_pnl["Tax Expense (20%)"].tolist()
+    tax_expense = df_pnl[df_pnl["Year"] != "Total"]["Tax Expense (20%)"].tolist()
 
-    df_rnav = RNAV_Calculation(
-        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate
-    )
-
+    
     st.header(f"Project: {project_name}")
 
-    st.header("P&L Schedule")
-    st.dataframe(df_pnl)
+    #Display selling progress as a list
+    st.write("**Selling Progress (Billions VND):**")
+    st.write(selling_progress)
 
-    st.header("RNAV Calculation (Discounted Cash Flows)")
-    st.dataframe(df_rnav)
+    # Display construction schedule as a list
+    st.write("**Construction Schedule (Billions VND):**")
+    st.write(construction_payment)
+
+    # Display SG&A schedule as a list
+    st.write("**SG&A Schedule (Billions VND):**")
+    st.write(sga_payment)
+
+    # Display land use right payment schedule as a list
+    st.write("**Land Use Right Payment Schedule (Single Year, Billions VND):**")
+    st.write(land_use_right_payment)    
+
+    df_rnav = RNAV_Calculation(
+        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
+    )
+
+
+
+
+    # Create two parallel columns for P&L Schedule and RNAV Calculation
+    pnl_col, rnav_col = st.columns(2)
+    
+    with pnl_col:
+        st.header("P&L Schedule")
+        st.dataframe(df_pnl)
+    
+    with rnav_col:
+        st.header("RNAV Calculation")
+        st.dataframe(df_rnav)
 
     st.subheader("RNAV (Total Discounted Cash Flow)")
-    rnav_value = df_rnav.loc['Total', 'Discounted Cash Flow']
+    rnav_value = df_rnav.loc['Total', 'Discounted Cash Flow'] * (10**9)
     st.write(f"**{format_vnd_billions(rnav_value)}**")
 
     st.header("Cash Flow Chart")
-    st.line_chart(df_rnav[df_rnav["Year Index"].notna()][["Net Cash Flow", "Discounted Cash Flow"]])
+    # Filter out the "Total" row and create chart with years on x-axis
+    chart_data = df_rnav[df_rnav["Year"] != "Total"].copy()
+    # Ensure Year column is integer for clean display
+    chart_data["Year"] = chart_data["Year"].astype(int)
+    chart_data = chart_data.set_index("Year")[["Net Cash Flow", "Discounted Cash Flow"]]
+    
+    # Use plotly for better control over x-axis formatting
+    import plotly.express as px
+    import plotly.graph_objects as go
+    
+    # Create plotly chart with clean year formatting
+    fig = go.Figure()
+    
+    # Add Net Cash Flow line
+    fig.add_trace(go.Scatter(
+        x=chart_data.index,
+        y=chart_data["Net Cash Flow"],
+        mode='lines+markers',
+        name='Net Cash Flow',
+        line=dict(color='blue')
+    ))
+    
+    # Add Discounted Cash Flow line
+    fig.add_trace(go.Scatter(
+        x=chart_data.index,
+        y=chart_data["Discounted Cash Flow"],
+        mode='lines+markers',
+        name='Discounted Cash Flow',
+        line=dict(color='red')
+    ))
+    
+    # Update layout for clean year display
+    fig.update_layout(
+        title="Cash Flow Analysis",
+        xaxis_title="Year",
+        yaxis_title="Cash Flow (Billions VND)",
+        xaxis=dict(
+            tickmode='linear',
+            tick0=chart_data.index.min(),
+            dtick=1,
+            tickformat='d'  # Display as integer without decimals
+        ),
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 def test_openai_connection(api_key: str, project_name: str = "Test Project"):
     """
