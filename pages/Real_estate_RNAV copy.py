@@ -544,8 +544,33 @@ def format_vnd_billions(value: float) -> str:
                 return f"{value:,.0f} VND"
 
 
-# %%
+def format_number_with_commas(value: str) -> str:
+    """
+    Format a numeric string with commas for better readability.
+    
+    Args:
+        value (str): Numeric value as string
+        
+    Returns:
+        str: Formatted number with commas
+    """
+    if not value or value == "":
+        return "none"
+    
+    try:
+        # Convert to float first to handle any decimal points
+        num = float(str(value).replace(",", ""))
+        # Format with commas
+        if num == int(num):
+            return f"{int(num):,}"
+        else:
+            return f"{num:,.2f}"
+    except (ValueError, TypeError):
+        return str(value)
 
+# ...existing code...
+
+# %%
 def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     """
     Get project information using Google Search + OpenAI analysis
