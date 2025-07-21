@@ -864,7 +864,7 @@ def search_project_online(project_name: str) -> dict:
 
 
 def main():
-    st.title("Real Estate RNAV Calculator 3.1PM")
+    st.title("Real Estate RNAV Calculator 3.2PM")
 
     # Add project name input
     project_name = st.text_input("Project Name", value="My Project")
@@ -1051,51 +1051,63 @@ def main():
 
     with param_col:
         st.header("Project Parameters")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 200_000), key="nsa")
-        with col2:
-            st.markdown(f"AI suggestion: **{nsa_suggest}**" if nsa_suggest else "AI suggestion: _none_")
-
-        col3, col4 = st.columns([3, 1])
-        with col3:
-            asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 100_000_000), key="asp")
-        with col4:
-            st.markdown(f"AI suggestion: **{asp_suggest}**" if asp_suggest else "AI suggestion: _none_")
-
-        col5, col6 = st.columns([3, 1])
-        with col5:
-            gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
-        with col6:
-            st.markdown(f"AI suggestion: **{gfa_suggest}**" if gfa_suggest else "AI suggestion: _none_")
-
-        col7, col8 = st.columns([3, 1])
-        with col7:
-            construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
-        with col8:
-            st.markdown(f"AI suggestion: **{construction_cost_suggest}**" if construction_cost_suggest else "AI suggestion: _none_")
-
-        col9, col10 = st.columns([3, 1])
-        with col9:
-            land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 50_000), key="land_area")
-        with col10:
-            st.markdown(f"AI suggestion: **{land_area_suggest}**" if land_area_suggest else "AI suggestion: _none_")
-
-        col11, col12 = st.columns([3, 1])
-        with col11:
-            land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 50_000_000), key="land_cost_per_sqm")
-        with col12:
-            st.markdown(f"AI suggestion: **{land_cost_suggest}**" if land_cost_suggest else "AI suggestion: _none_")
+        
+        # Net Sellable Area
+        nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 200_000), key="nsa")
+        if nsa_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(nsa_suggest)}** m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Average Selling Price
+        asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 100_000_000), key="asp")
+        if asp_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(asp_suggest)}** VND/m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Gross Floor Area
+        gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
+        if gfa_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(gfa_suggest)}** m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Construction Cost per sqm
+        construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
+        if construction_cost_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(construction_cost_suggest)}** VND/m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Land Area
+        land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 50_000), key="land_area")
+        if land_area_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(land_area_suggest)}** m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Land Cost per sqm
+        land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 50_000_000), key="land_cost_per_sqm")
+        if land_cost_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(land_cost_suggest)}** VND/m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
 
         # Button to copy all suggested values
-        if st.button("Copy All Suggested Values"):
+        st.markdown("---")
+        if st.button("📋 Copy All Suggested Values"):
             st.warning("Please manually copy the suggested values into the textboxes above. (Streamlit does not allow programmatic update after widget creation.)")
 
     with timeline_col:
         st.header("Timeline")
         current_year = st.number_input("Current Year", value=2025)
         start_year = st.number_input("Construction/Sales Start Year", value=2025)
-        num_years = st.number_input("Number of Years (Construction/Sales)", value=3)
+        
+        # Separate construction and sales duration
+        construction_years = st.number_input("Number of Years for Construction", value=3, min_value=1)
+        sales_years = st.number_input("Number of Years for Sales", value=3, min_value=1)
+        
         start_booking_year = st.number_input("Revenue Booking Start Year", value=2027)
         complete_year = st.number_input("Project Completion Year", value=2030)
         
@@ -1119,15 +1131,15 @@ def main():
     st.write(f"**Total Estimated PBT:** {format_vnd_billions(total_estimated_PBT)}")
     st.write(f"**Total Estimated PAT:** {format_vnd_billions(total_estimated_PAT)}")
 
-    # ...existing code for schedules and outputs...
+    # Update schedule calculations to use separate construction and sales years
     selling_progress = selling_progress_schedule(
-        total_revenue/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_revenue/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
     )
     sga_payment = sga_payment_schedule(
-        total_sga_cost/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_sga_cost/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
     )
     construction_payment = construction_payment_schedule(
-        total_construction_cost/(10**9), int(current_year), int(start_year), int(num_years), int(complete_year)
+        total_construction_cost/(10**9), int(current_year), int(start_year), int(construction_years), int(complete_year)
     )
     land_use_right_payment = land_use_right_payment_schedule_single_year(
         total_land_cost/(10**9), int(current_year), int(start_year), int(complete_year)
@@ -1143,20 +1155,20 @@ def main():
     st.header(f"Project: {project_name}")
 
     #Display selling progress as a list
-    st.write("**Selling Progress (Billions VND):**")
-    st.write(selling_progress)
+    #st.write("**Selling Progress (Billions VND):**")
+    #st.write(selling_progress)
 
     # Display construction schedule as a list
-    st.write("**Construction Schedule (Billions VND):**")
-    st.write(construction_payment)
+    #st.write("**Construction Schedule (Billions VND):**")
+    #st.write(construction_payment)
 
     # Display SG&A schedule as a list
-    st.write("**SG&A Schedule (Billions VND):**")
-    st.write(sga_payment)
+    #st.write("**SG&A Schedule (Billions VND):**")
+    #st.write(sga_payment)
 
     # Display land use right payment schedule as a list
-    st.write("**Land Use Right Payment Schedule (Single Year, Billions VND):**")
-    st.write(land_use_right_payment)    
+    #st.write("**Land Use Right Payment Schedule (Single Year, Billions VND):**")
+    #st.write(land_use_right_payment)    
 
     df_rnav = RNAV_Calculation(
         selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
