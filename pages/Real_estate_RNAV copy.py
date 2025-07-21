@@ -784,29 +784,45 @@ def search_project_online(project_name: str) -> dict:
         # Build the Google Search service
         service = build("customsearch", "v1", developerKey=google_api_key)
         
-        # Enhanced search queries targeting specific information
+        # Enhanced search queries targeting specific Vietnamese real estate websites
         search_queries = [
-            # Basic project information
-            f'"{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư địa điểm',
-            f'"{project_name}" real estate project basic information developer location Vietnam',
+            # Basic project information from batdongsan.com
+            f'site:batdongsan.com.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:batdongsan.com.vn "{project_name}" real estate project basic information developer',
             
-            # Net sellable area and project scale
-            f'"{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
-            f'"{project_name}" net sellable area total units apartment scale Vietnam',
-            f'"{project_name}" "diện tích" "căn hộ" "tổng số" Vietnam',
+            # Basic project information from rever.vn
+            f'site:rever.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:rever.vn "{project_name}" real estate project basic information developer',
             
-            # Average selling price
-            f'"{project_name}" giá bán trung bình giá m2 bảng giá',
-            f'"{project_name}" selling price per sqm average price Vietnam',
-            f'"{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá mới nhất',
+            # Net sellable area and project scale from batdongsan.com
+            f'site:batdongsan.com.vn "{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
+            f'site:batdongsan.com.vn "{project_name}" "diện tích" "căn hộ" "tổng số"',
             
-            # Detailed specifications and pricing
-            f'"{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
-            f'"{project_name}" specifications floor area price list Vietnam property',
+            # Net sellable area and project scale from rever.vn
+            f'site:rever.vn "{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
+            f'site:rever.vn "{project_name}" "diện tích" "căn hộ" "tổng số"',
             
-            # Market analysis and comparison
-            f'"{project_name}" phân tích thị trường so sánh giá bất động sản',
-            f'"{project_name}" market analysis price comparison real estate Vietnam'
+            # Average selling price from batdongsan.com
+            f'site:batdongsan.com.vn "{project_name}" giá bán trung bình giá m2 bảng giá',
+            f'site:batdongsan.com.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            
+            # Average selling price from rever.vn
+            f'site:rever.vn "{project_name}" giá bán trung bình giá m2 bảng giá',
+            f'site:rever.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            
+            # Detailed specifications and pricing from batdongsan.com
+            f'site:batdongsan.com.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'site:batdongsan.com.vn "{project_name}" specifications floor area price list',
+            
+            # Detailed specifications and pricing from rever.vn
+            f'site:rever.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'site:rever.vn "{project_name}" specifications floor area price list',
+            
+            # Market analysis from batdongsan.com
+            f'site:batdongsan.com.vn "{project_name}" phân tích thị trường so sánh giá',
+            
+            # Market analysis from rever.vn
+            f'site:rever.vn "{project_name}" phân tích thị trường so sánh giá'
         ]
         
         all_results = []
@@ -819,7 +835,7 @@ def search_project_online(project_name: str) -> dict:
                 result = service.cse().list(
                     q=query,
                     cx=google_search_engine_id,
-                    num=4,  # Get more results per query for better coverage
+                    num=3,  # Reduced number per query since we're targeting specific sites
                     lr='lang_vi|lang_en',  # Vietnamese and English
                     dateRestrict='y3',  # Results from last 3 years for more data
                     safe='medium',
@@ -845,6 +861,14 @@ def search_project_online(project_name: str) -> dict:
                         elif any(keyword in snippet + title for keyword in ['chủ đầu tư', 'developer', 'dự án', 'project']):
                             category = "basic_info"
                         
+                        # Determine source website
+                        source_site = "unknown"
+                        link = item.get('link', '').lower()
+                        if 'batdongsan.com' in link:
+                            source_site = "batdongsan.com.vn"
+                        elif 'rever.vn' in link:
+                            source_site = "rever.vn"
+                        
                         all_results.append({
                             'title': item.get('title', ''),
                             'link': item.get('link', ''),
@@ -853,7 +877,8 @@ def search_project_online(project_name: str) -> dict:
                             'formatted_url': item.get('formattedUrl', ''),
                             'query_used': query,
                             'category': category,
-                            'query_index': i + 1
+                            'query_index': i + 1,
+                            'source_site': source_site
                         })
                         
             except Exception as search_error:
@@ -868,13 +893,20 @@ def search_project_online(project_name: str) -> dict:
         print(f"Total search results collected: {len(all_results)}")
         print(f"Results by category: {dict(pd.Series([r['category'] for r in all_results]).value_counts())}")
         
+        # Count results by source site
+        source_counts = {}
+        for result in all_results:
+            source = result.get('source_site', 'unknown')
+            source_counts[source] = source_counts.get(source, 0) + 1
+        
         return {
             "status": "success",
-            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries, prioritized by relevance",
+            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries, targeting batdongsan.com.vn and rever.vn",
             "results": all_results,
             "queries_attempted": len(search_queries),
             "successful_queries": len([r for r in all_results if r]),
-            "results_by_category": dict(pd.Series([r['category'] for r in all_results]).value_counts())
+            "results_by_category": dict(pd.Series([r['category'] for r in all_results]).value_counts()),
+            "results_by_source": source_counts
         }
         
     except Exception as e:
