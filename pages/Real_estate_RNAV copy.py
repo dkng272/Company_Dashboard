@@ -577,17 +577,19 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"2. Current selling prices (if mentioned in search results)\n"
         f"3. Project scale and specifications\n"
         f"4. Market positioning and category\n\n"
-        f"Format your response EXACTLY as follows:\n\n"
+        f"IMPORTANT: Format your response EXACTLY as follows (include the colons and use only numbers for numeric fields):\n\n"
         f"Info: [Detailed project description with current status, location, and developer]\n"
-        f"Average Selling Price: [Current price per m² in VND, numbers only - if not found, estimate based on project category]\n"
-        f"Net Sellable Area: [Total sellable area in m², numbers only - if not found, estimate based on project scale]\n"
-        f"Gross Floor Area: [Total GFA in m², numbers only - if not found, estimate based on project scale]\n"
-        f"Construction Cost per sqm: [Estimated construction cost per m² in VND, numbers only]\n"
-        f"Land Area: [Land area in m², numbers only - if not found, estimate based on project scale]\n"
-        f"Land Cost per sqm: [Estimated land cost per m² in VND, numbers only]\n"
+        f"Average Selling Price: 100000000\n"
+        f"Net Sellable Area: 200000\n"
+        f"Gross Floor Area: 300000\n"
+        f"Construction Cost per sqm: 20000000\n"
+        f"Land Area: 50000\n"
+        f"Land Cost per sqm: 50000000\n"
         f"Sources: [List key sources from search results or 'Training data + market estimates']\n"
         f"Confidence: [High/Medium/Low based on available data]\n\n"
-        f"Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available."
+        f"For numeric values, provide ONLY the number (no commas, no currency symbols, no units).\n"
+        f"Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available.\n"
+        f"If you cannot find specific data, provide reasonable market estimates based on project type and location."
     )
     
     # Step 4: Get OpenAI analysis
@@ -602,12 +604,12 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 messages=[
                     {
                         "role": "system", 
-                        "content": "You are an expert Vietnamese real estate analyst. Analyze search results and provide accurate project information. Use current market data when available, and provide reasonable estimates based on Vietnamese market standards when specific data is missing."
+                        "content": "You are an expert Vietnamese real estate analyst. Always follow the exact format requested. For numeric values, provide ONLY numbers without any formatting, commas, or currency symbols. Provide reasonable estimates based on Vietnamese market standards when specific data is missing."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1200,
-                temperature=0.2,  # Low temperature for factual accuracy
+                max_tokens=1500,
+                temperature=0.1,  # Very low temperature for consistent formatting
             )
             
             content = response.choices[0].message.content.strip()
@@ -618,7 +620,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 return {"error": f"All models failed. Last error: {str(model_error)}"}
             continue
     
-    # Step 5: Parse the response
+    # Step 5: Parse the response with improved patterns
     result = {
         "basic_info": "",
         "asp": "",
@@ -636,27 +638,108 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         "google_search_used": search_results["status"] == "success"
     }
     
-    # Enhanced regex patterns
+    # Enhanced regex patterns with multiple variations
     patterns = {
-        "basic_info": r"Info:\s*(.*?)(?=Average Selling Price:|$)",
-        "asp": r"Average Selling Price:\s*([0-9,\.]+)",
-        "nsa": r"Net Sellable Area:\s*([0-9,\.]+)",
-        "gfa": r"Gross Floor Area:\s*([0-9,\.]+)",
-        "construction_cost_per_sqm": r"Construction Cost per sqm:\s*([0-9,\.]+)",
-        "land_area": r"Land Area:\s*([0-9,\.]+)",
-        "land_cost_per_sqm": r"Land Cost per sqm:\s*([0-9,\.]+)",
-        "sources": r"Sources:\s*(.*?)(?=Confidence:|$)",
-        "confidence": r"Confidence:\s*(.*?)(?=\n|$)"
+        "basic_info": [
+            r"Info:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)",
+            r"Project Info:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)",
+            r"Description:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)"
+        ],
+        "asp": [
+            r"Average Selling Price:\s*([0-9,\.]+)",
+            r"Selling Price:\s*([0-9,\.]+)",
+            r"Price per sqm:\s*([0-9,\.]+)",
+            r"ASP:\s*([0-9,\.]+)"
+        ],
+        "nsa": [
+            r"Net Sellable Area:\s*([0-9,\.]+)",
+            r"Sellable Area:\s*([0-9,\.]+)",
+            r"NSA:\s*([0-9,\.]+)"
+        ],
+        "gfa": [
+            r"Gross Floor Area:\s*([0-9,\.]+)",
+            r"Floor Area:\s*([0-9,\.]+)",
+            r"GFA:\s*([0-9,\.]+)",
+            r"Total Floor Area:\s*([0-9,\.]+)"
+        ],
+        "construction_cost_per_sqm": [
+            r"Construction Cost per sqm:\s*([0-9,\.]+)",
+            r"Construction Cost:\s*([0-9,\.]+)",
+            r"Building Cost per sqm:\s*([0-9,\.]+)"
+        ],
+        "land_area": [
+            r"Land Area:\s*([0-9,\.]+)",
+            r"Site Area:\s*([0-9,\.]+)",
+            r"Plot Area:\s*([0-9,\.]+)"
+        ],
+        "land_cost_per_sqm": [
+            r"Land Cost per sqm:\s*([0-9,\.]+)",
+            r"Land Cost:\s*([0-9,\.]+)",
+            r"Land Price per sqm:\s*([0-9,\.]+)"
+        ],
+        "sources": [
+            r"Sources:\s*(.*?)(?=Confidence:|$)",
+            r"Source:\s*(.*?)(?=Confidence:|$)",
+            r"References:\s*(.*?)(?=Confidence:|$)"
+        ],
+        "confidence": [
+            r"Confidence:\s*(.*?)(?=\n|$)",
+            r"Reliability:\s*(.*?)(?=\n|$)"
+        ]
     }
     
-    for key, pat in patterns.items():
-        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-        if m:
-            value = m.group(1).strip()
-            # Clean up numeric values
-            if key not in ["basic_info", "sources", "confidence"] and value:
-                value = re.sub(r'[^\d\.]', '', value)  # Keep only digits and dots
-            result[key] = value
+    # Try multiple patterns for each field
+    for key, pattern_list in patterns.items():
+        found = False
+        for pattern in pattern_list:
+            m = re.search(pattern, content, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            if m:
+                value = m.group(1).strip()
+                
+                # Clean up numeric values more aggressively
+                if key not in ["basic_info", "sources", "confidence"] and value:
+                    # Remove all non-numeric characters except dots
+                    cleaned_value = re.sub(r'[^\d\.]', '', value)
+                    # Handle multiple dots (keep only the first one)
+                    if cleaned_value.count('.') > 1:
+                        parts = cleaned_value.split('.')
+                        cleaned_value = parts[0] + '.' + ''.join(parts[1:])
+                    # Remove trailing dots
+                    cleaned_value = cleaned_value.rstrip('.')
+                    value = cleaned_value
+                
+                result[key] = value
+                found = True
+                break
+        
+        # Fallback extraction for numeric fields if patterns fail
+        if not found and key not in ["basic_info", "sources", "confidence"]:
+            # Try to find any number in the vicinity of the field name
+            field_names = {
+                "asp": ["selling price", "price per sqm", "average price"],
+                "nsa": ["sellable area", "net area", "nsa"],
+                "gfa": ["floor area", "gross area", "gfa", "total area"],
+                "construction_cost_per_sqm": ["construction cost", "building cost"],
+                "land_area": ["land area", "site area", "plot area"],
+                "land_cost_per_sqm": ["land cost", "land price"]
+            }
+            
+            for field_name in field_names.get(key, []):
+                # Look for numbers after field name mentions
+                pattern = rf"{field_name}[:\s]*([0-9,\.]+)"
+                m = re.search(pattern, content, re.IGNORECASE)
+                if m:
+                    value = re.sub(r'[^\d\.]', '', m.group(1))
+                    if value:
+                        result[key] = value
+                        break
+    
+    # Add debug information for troubleshooting
+    result["parsing_debug"] = {
+        "content_length": len(content),
+        "fields_found": {k: bool(v) for k, v in result.items() if k not in ["raw_content", "parsing_debug"]},
+        "sample_content": content[:500] + "..." if len(content) > 500 else content
+    }
     
     return result
 
@@ -781,7 +864,7 @@ def search_project_online(project_name: str) -> dict:
 
 
 def main():
-    st.title("Real Estate RNAV Calculator 3PM")
+    st.title("Real Estate RNAV Calculator 3.1PM")
 
     # Add project name input
     project_name = st.text_input("Project Name", value="My Project")
