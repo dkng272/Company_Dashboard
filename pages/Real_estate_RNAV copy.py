@@ -797,11 +797,21 @@ def main():
         st.session_state["project_info_raw"] = ""
     if "show_raw_response" not in st.session_state:
         st.session_state["show_raw_response"] = False
+    # Add session state for search results debugging
+    if "search_results" not in st.session_state:
+        st.session_state["search_results"] = {}
+    if "show_search_results" not in st.session_state:
+        st.session_state["show_search_results"] = False
     
     # Only show ChatGPT button if API key is available
     if api_key:
         if st.button("🔍 Search Project Info (Web Search + AI)"):
             with st.spinner("Searching the web for current project information..."):
+                # First, get search results for debugging
+                search_results = search_project_online(project_name)
+                st.session_state["search_results"] = search_results
+                
+                # Then get full project info
                 info = get_project_basic_info(project_name, api_key)
                 st.session_state["project_info"] = info
                 
@@ -836,6 +846,76 @@ def main():
             st.info("🔍 **Google Search Integration**: Set up Google Custom Search for enhanced web search.")
     else:
         st.info("💡 Set up your OpenAI API key to use AI-powered project information search.")
+
+    # Debug section for Google Search Results
+    search_results = st.session_state.get("search_results", {})
+    if search_results:
+        # Toggle button for search results debugging
+        if st.button("🔍 Show/Hide Google Search Results (Debug)"):
+            st.session_state["show_search_results"] = not st.session_state["show_search_results"]
+        
+        # Show search results if toggled on
+        if st.session_state["show_search_results"]:
+            st.markdown("---")
+            st.markdown("### 🔍 Google Search Results (Debug Information)")
+            
+            # Show search status and summary
+            status = search_results.get("status", "unknown")
+            message = search_results.get("message", "No message")
+            results = search_results.get("results", [])
+            
+            # Status overview
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Search Status", status)
+            with col2:
+                st.metric("Total Results", len(results))
+            with col3:
+                queries_attempted = search_results.get("queries_attempted", 0)
+                st.metric("Queries Attempted", queries_attempted)
+            
+            # Show message
+            if status == "success":
+                st.success(f"✅ {message}")
+            elif status == "error":
+                st.error(f"❌ {message}")
+            else:
+                st.warning(f"⚠️ {message}")
+            
+            # Show results by category if available
+            if results and "results_by_category" in search_results:
+                st.markdown("**Results by Category:**")
+                category_data = search_results["results_by_category"]
+                for category, count in category_data.items():
+                    st.write(f"- **{category.title()}**: {count} results")
+            
+            # Show individual search results
+            if results:
+                st.markdown("**Individual Search Results:**")
+                
+                # Group results by category for better organization
+                results_by_category = {}
+                for result in results:
+                    category = result.get("category", "general")
+                    if category not in results_by_category:
+                        results_by_category[category] = []
+                    results_by_category[category].append(result)
+                
+                # Display results by category
+                for category, category_results in results_by_category.items():
+                    with st.expander(f"📁 {category.title()} Results ({len(category_results)} items)", expanded=(category == "pricing")):
+                        for i, result in enumerate(category_results, 1):
+                            st.markdown(f"**{i}. {result.get('title', 'No title')}**")
+                            st.markdown(f"🔗 **Link:** {result.get('link', 'No link')}")
+                            st.markdown(f"📝 **Snippet:** {result.get('snippet', 'No snippet')}")
+                            st.markdown(f"🔍 **Query used:** `{result.get('query_used', 'Unknown')}`")
+                            st.markdown(f"📊 **Category:** {result.get('category', 'general')}")
+                            if i < len(category_results):
+                                st.markdown("---")
+            else:
+                st.warning("No search results to display")
+            
+            st.markdown("---")
 
     project_info = st.session_state.get("project_info", {})
     project_info_raw = st.session_state.get("project_info_raw", "")
