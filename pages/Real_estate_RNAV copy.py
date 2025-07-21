@@ -781,7 +781,7 @@ def search_project_online(project_name: str) -> dict:
 
 
 def main():
-    st.title("Real Estate RNAV Calculator")
+    st.title("Real Estate RNAV Calculator 3PM")
 
     # Add project name input
     project_name = st.text_input("Project Name", value="My Project")
