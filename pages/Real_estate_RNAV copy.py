@@ -663,6 +663,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
 def search_project_online(project_name: str) -> dict:
     """
     Search for project information online using Google Custom Search API
+    Focuses on getting basic info, net sellable area, and average selling price
     """
     if not google_search_enabled:
         return {
@@ -675,42 +676,76 @@ def search_project_online(project_name: str) -> dict:
         # Build the Google Search service
         service = build("customsearch", "v1", developerKey=google_api_key)
         
-        # Search queries for Vietnamese real estate
+        # Enhanced search queries targeting specific information
         search_queries = [
-            f"{project_name} dự án bất động sản Vietnam",
-            f"{project_name} real estate project Vietnam price",
-            f"{project_name} apartment condo Vietnam selling price",
-            f'"{project_name}" developer Vietnam real estate'
+            # Basic project information
+            f'"{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư địa điểm',
+            f'"{project_name}" real estate project basic information developer location Vietnam',
+            
+            # Net sellable area and project scale
+            f'"{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
+            f'"{project_name}" net sellable area total units apartment scale Vietnam',
+            f'"{project_name}" "diện tích" "căn hộ" "tổng số" Vietnam',
+            
+            # Average selling price
+            f'"{project_name}" giá bán trung bình giá m2 bảng giá',
+            f'"{project_name}" selling price per sqm average price Vietnam',
+            f'"{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá mới nhất',
+            
+            # Detailed specifications and pricing
+            f'"{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'"{project_name}" specifications floor area price list Vietnam property',
+            
+            # Market analysis and comparison
+            f'"{project_name}" phân tích thị trường so sánh giá bất động sản',
+            f'"{project_name}" market analysis price comparison real estate Vietnam'
         ]
         
         all_results = []
         
         for i, query in enumerate(search_queries):
             try:
-                print(f"Executing search query {i+1}: {query}")
+                print(f"Executing search query {i+1}/{len(search_queries)}: {query}")
                 
-                # Execute search with more specific parameters
+                # Execute search with parameters optimized for Vietnamese real estate
                 result = service.cse().list(
                     q=query,
                     cx=google_search_engine_id,
-                    num=3,  # Reduced to 3 to avoid quota issues
+                    num=4,  # Get more results per query for better coverage
                     lr='lang_vi|lang_en',  # Vietnamese and English
-                    dateRestrict='y2',  # Results from last 2 years
+                    dateRestrict='y3',  # Results from last 3 years for more data
                     safe='medium',
-                    fields='items(title,link,snippet,displayLink)'  # Only get needed fields
+                    gl='vn',  # Search in Vietnam
+                    hl='vi',  # Interface language Vietnamese
+                    fields='items(title,link,snippet,displayLink,formattedUrl)'
                 ).execute()
                 
                 print(f"Search {i+1} returned {len(result.get('items', []))} results")
                 
-                # Extract useful information
+                # Extract and categorize information
                 if 'items' in result:
                     for item in result['items']:
+                        # Categorize the result based on content
+                        snippet = item.get('snippet', '').lower()
+                        title = item.get('title', '').lower()
+                        
+                        category = "general"
+                        if any(keyword in snippet + title for keyword in ['giá', 'price', 'triệu', 'tỷ', 'vnd']):
+                            category = "pricing"
+                        elif any(keyword in snippet + title for keyword in ['diện tích', 'area', 'm2', 'sqm', 'căn hộ']):
+                            category = "area_specs"
+                        elif any(keyword in snippet + title for keyword in ['chủ đầu tư', 'developer', 'dự án', 'project']):
+                            category = "basic_info"
+                        
                         all_results.append({
                             'title': item.get('title', ''),
                             'link': item.get('link', ''),
                             'snippet': item.get('snippet', ''),
                             'display_link': item.get('displayLink', ''),
-                            'query_used': query
+                            'formatted_url': item.get('formattedUrl', ''),
+                            'query_used': query,
+                            'category': category,
+                            'query_index': i + 1
                         })
                         
             except Exception as search_error:
@@ -718,14 +753,20 @@ def search_project_online(project_name: str) -> dict:
                 # Continue with next query instead of failing completely
                 continue
         
+        # Sort results by category priority (pricing and area specs first)
+        category_priority = {"pricing": 1, "area_specs": 2, "basic_info": 3, "general": 4}
+        all_results.sort(key=lambda x: category_priority.get(x['category'], 5))
+        
         print(f"Total search results collected: {len(all_results)}")
+        print(f"Results by category: {dict(pd.Series([r['category'] for r in all_results]).value_counts())}")
         
         return {
             "status": "success",
-            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries",
+            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries, prioritized by relevance",
             "results": all_results,
             "queries_attempted": len(search_queries),
-            "successful_queries": len([r for r in all_results if r])
+            "successful_queries": len([r for r in all_results if r]),
+            "results_by_category": dict(pd.Series([r['category'] for r in all_results]).value_counts())
         }
         
     except Exception as e:
