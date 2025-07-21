@@ -599,10 +599,20 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"{search_context}\n"
         f"Please extract and provide the following information:\n\n"
         f"1. Project location, developer, and current status\n"
-        f"2. Current selling prices (if mentioned in search results)\n"
+        f"2. Current selling prices (IMPORTANT: distinguish between price per unit vs price per sqm)\n"
         f"3. Project scale and specifications\n"
         f"4. Market positioning and category\n\n"
-        f"IMPORTANT: Format your response EXACTLY as follows (include the colons and use only numbers for numeric fields):\n\n"
+        f"CRITICAL PRICING INSTRUCTIONS:\n"
+        f"- ALWAYS distinguish between 'price per unit' (giá/căn) and 'price per sqm' (giá/m²)\n"
+        f"- Price per unit examples: '2.5 tỷ/căn', '3 billion VND/unit', '1.8 tỷ VND/căn hộ'\n"
+        f"- Price per sqm examples: '50 triệu/m²', '80 million VND/m²', '60 triệu VND/m²'\n"
+        f"- If you find price per unit AND average unit size, calculate: Price per sqm = Price per unit ÷ Average unit size\n"
+        f"- Vietnamese context: 1 tỷ = 1 billion VND, 1 triệu = 1 million VND\n"
+        f"- Common unit sizes in Vietnam: 50-120m² for apartments, 100-300m² for villas\n\n"
+        f"CALCULATION EXAMPLES:\n"
+        f"- If unit price = 3 tỷ VND and unit size = 75m², then price per sqm = 3,000,000,000 ÷ 75 = 40,000,000 VND/m²\n"
+        f"- If unit price = 2.5 billion VND and unit size = 80m², then price per sqm = 2,500,000,000 ÷ 80 = 31,250,000 VND/m²\n\n"
+        f"FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:\n\n"
         f"Info: [Detailed project description with current status, location, and developer]\n"
         f"Average Selling Price: 100000000\n"
         f"Net Sellable Area: 200000\n"
@@ -611,10 +621,14 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"Land Area: 50000\n"
         f"Land Cost per sqm: 50000000\n"
         f"Sources: [List key sources from search results or 'Training data + market estimates']\n"
-        f"Confidence: [High/Medium/Low based on available data]\n\n"
-        f"For numeric values, provide ONLY the number (no commas, no currency symbols, no units).\n"
-        f"Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available.\n"
-        f"If you cannot find specific data, provide reasonable market estimates based on project type and location."
+        f"Confidence: [High/Medium/Low based on available data]\n"
+        f"Price Analysis: [Explain your price calculation: 'Found price per sqm directly' OR 'Calculated from unit price X VND ÷ unit size Y m² = Z VND/m²' OR 'Market estimate based on location/type']\n\n"
+        f"IMPORTANT NOTES:\n"
+        f"- For 'Average Selling Price', provide ONLY the price per m² in VND (numbers only, no commas/currency)\n"
+        f"- If you find unit prices, convert them to price per m² using typical unit sizes for that project type\n"
+        f"- Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available\n"
+        f"- Apartment projects: typical unit size 60-90m², luxury: 80-150m², villa: 150-400m²\n"
+        f"- If uncertain about unit size, use conservative estimates: apartments 75m², villas 200m²"
     )
     
     # Step 4: Get OpenAI analysis
@@ -629,11 +643,11 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 messages=[
                     {
                         "role": "system", 
-                        "content": "You are an expert Vietnamese real estate analyst. Always follow the exact format requested. For numeric values, provide ONLY numbers without any formatting, commas, or currency symbols. Provide reasonable estimates based on Vietnamese market standards when specific data is missing."
+                        "content": "You are an expert Vietnamese real estate analyst with deep knowledge of pricing structures. You MUST distinguish between unit prices (giá/căn) and price per sqm (giá/m²). When you find unit prices, calculate the price per sqm by dividing by typical unit sizes. Always explain your pricing calculation method. For numeric fields, provide ONLY numbers without formatting."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1500,
+                max_tokens=1800,  # Increased for more detailed price analysis
                 temperature=0.1,  # Very low temperature for consistent formatting
             )
             
@@ -656,6 +670,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         "land_cost_per_sqm": "",
         "sources": "",
         "confidence": "",
+        "price_analysis": "",  # New field for price calculation explanation
         "raw_content": content,
         "model_used": model,
         "search_results_count": len(search_results.get("results", [])),
@@ -703,13 +718,18 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
             r"Land Price per sqm:\s*([0-9,\.]+)"
         ],
         "sources": [
-            r"Sources:\s*(.*?)(?=Confidence:|$)",
-            r"Source:\s*(.*?)(?=Confidence:|$)",
-            r"References:\s*(.*?)(?=Confidence:|$)"
+            r"Sources:\s*(.*?)(?=Confidence:|Price Analysis:|$)",
+            r"Source:\s*(.*?)(?=Confidence:|Price Analysis:|$)",
+            r"References:\s*(.*?)(?=Confidence:|Price Analysis:|$)"
         ],
         "confidence": [
-            r"Confidence:\s*(.*?)(?=\n|$)",
-            r"Reliability:\s*(.*?)(?=\n|$)"
+            r"Confidence:\s*(.*?)(?=Price Analysis:|\n|$)",
+            r"Reliability:\s*(.*?)(?=Price Analysis:|\n|$)"
+        ],
+        "price_analysis": [
+            r"Price Analysis:\s*(.*?)(?=\n|$)",
+            r"Pricing Method:\s*(.*?)(?=\n|$)",
+            r"Price Calculation:\s*(.*?)(?=\n|$)"
         ]
     }
     
@@ -722,7 +742,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 value = m.group(1).strip()
                 
                 # Clean up numeric values more aggressively
-                if key not in ["basic_info", "sources", "confidence"] and value:
+                if key not in ["basic_info", "sources", "confidence", "price_analysis"] and value:
                     # Remove all non-numeric characters except dots
                     cleaned_value = re.sub(r'[^\d\.]', '', value)
                     # Handle multiple dots (keep only the first one)
@@ -738,7 +758,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 break
         
         # Fallback extraction for numeric fields if patterns fail
-        if not found and key not in ["basic_info", "sources", "confidence"]:
+        if not found and key not in ["basic_info", "sources", "confidence", "price_analysis"]:
             # Try to find any number in the vicinity of the field name
             field_names = {
                 "asp": ["selling price", "price per sqm", "average price"],
@@ -1036,7 +1056,7 @@ def main():
                 # Group results by category for better organization
                 results_by_category = {}
                 for result in results:
-                    category = result.get("category", "general")
+                    category = result.get('category', "general")
                     if category not in results_by_category:
                         results_by_category[category] = []
                     results_by_category[category].append(result)
