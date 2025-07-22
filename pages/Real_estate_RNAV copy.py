@@ -5,6 +5,7 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 import re
+from datetime import datetime
 
 
 # Optional: If openai is not installed, run: pip install openai
@@ -1630,13 +1631,14 @@ def main():
 
     with timeline_col:
         st.header("Timeline")
-        current_year = st.number_input(
-            "Current Year", 
-            value=parse_int_with_preload("", None, 2025)
-        )
+        
+        # Automatically set current year based on calendar year
+        current_year = datetime.now().year
+        st.info(f"📅 **Current Year:** {current_year} (automatically set)")
+        
         start_year = st.number_input(
             "Construction/Sales Start Year", 
-            value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, 2025)
+            value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, current_year)
         )
         
         # Separate construction and sales duration
