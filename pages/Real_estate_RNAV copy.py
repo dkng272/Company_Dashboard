@@ -282,56 +282,45 @@ def generate_pnl_schedule(
     end_booking_year: int
 ) -> pd.DataFrame:
     """
-    Generate a simplified P&L schedule from current_year to end_booking_year.
-    Now shows both historical and future data with proper labeling.
+    Generate a simplified P&L schedule from start_booking_year to end_booking_year.
+    Shows both historical and future data with proper labeling.
 
     Args:
         total_revenue (float): Total revenue (VND)
         total_land_payment (float): Total land use cost (VND)
         total_construction_payment (float): Total construction payment (VND)
         total_sga (float): Total SG&A (VND)
-        current_year (int): First year of the model
-        start_booking_year (int): Year revenue starts
-        end_booking_year (int): Year revenue ends
+        current_year (int): Current year (for historical vs future classification)
+        start_booking_year (int): Year revenue booking starts
+        end_booking_year (int): Year revenue booking ends
 
     Returns:
-        pd.DataFrame: Year-by-year P&L table from current_year to end_booking_year with totals row
+        pd.DataFrame: Year-by-year P&L table from start_booking_year to end_booking_year with totals row
     """
     if end_booking_year < start_booking_year:
         raise ValueError("end_booking_year must be >= start_booking_year")
 
-    # Calculate the actual booking period length
-    booking_start = max(start_booking_year, current_year)  # Don't book historical revenue
-    if booking_start > end_booking_year:
-        num_booking_years = 0
-        revenue_annual = 0
-    else:
-        num_booking_years = end_booking_year - booking_start + 1
-        revenue_annual = total_revenue / (end_booking_year - start_booking_year + 1)
-
-    # Distribute other costs over their full periods
+    # Calculate annual amounts based on total booking period
     total_booking_years = end_booking_year - start_booking_year + 1
+    revenue_annual = total_revenue / total_booking_years if total_booking_years > 0 else 0
     land_payment_annual = total_land_payment / total_booking_years if total_booking_years > 0 else 0
     sga_annual = total_sga / total_booking_years if total_booking_years > 0 else 0
     construction_annual = total_construction_payment / total_booking_years if total_booking_years > 0 else 0
 
     pnl_data = []
-    for year in range(current_year, end_booking_year + 1):
+    for year in range(start_booking_year, end_booking_year + 1):
         # Determine if this is historical or future
         is_historical = year < current_year
         year_type = "Historical" if is_historical else "Future"
         
-        if year < start_booking_year:
-            revenue = land_cost = sga = pbt = tax = pat = construction = 0.0
-        else:
-            # Only book revenue for current and future years
-            revenue = revenue_annual if year >= current_year else 0.0
-            land_cost = land_payment_annual
-            sga = sga_annual
-            construction = construction_annual
-            pbt = revenue + land_cost + sga + construction
-            tax = -pbt * 0.2 if pbt > 0 else 0.0
-            pat = pbt + tax
+        # All years in the booking period have values
+        revenue = revenue_annual
+        land_cost = land_payment_annual
+        sga = sga_annual
+        construction = construction_annual
+        pbt = revenue + land_cost + sga + construction
+        tax = -pbt * 0.2 if pbt > 0 else 0.0
+        pat = pbt + tax
 
         pnl_data.append({
             "Year": year,
@@ -347,22 +336,52 @@ def generate_pnl_schedule(
 
     df = pd.DataFrame(pnl_data)
     
-    # Add total row (only for future years for RNAV calculation)
-    future_df = df[df["Year"] >= current_year]
-    total_row = {
-        "Year": "Total (Future)",
-        "Type": "Summary",
-        "Revenue": future_df["Revenue"].sum(),
-        "Land Payment": future_df["Land Payment"].sum(),
-        "Construction": future_df["Construction"].sum(),
-        "SG&A": future_df["SG&A"].sum(),
-        "Profit Before Tax": future_df["Profit Before Tax"].sum(),
-        "Tax Expense (20%)": future_df["Tax Expense (20%)"].sum(),
-        "Profit After Tax": future_df["Profit After Tax"].sum()
-    }
+    # Add total rows for historical, future, and overall
+    historical_df = df[df["Type"] == "Historical"]
+    future_df = df[df["Type"] == "Future"]
     
-    # Use pd.concat instead of deprecated append
-    df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+    # Add subtotals
+    if not historical_df.empty:
+        historical_total = {
+            "Year": "Total (Historical)",
+            "Type": "Summary",
+            "Revenue": historical_df["Revenue"].sum(),
+            "Land Payment": historical_df["Land Payment"].sum(),
+            "Construction": historical_df["Construction"].sum(),
+            "SG&A": historical_df["SG&A"].sum(),
+            "Profit Before Tax": historical_df["Profit Before Tax"].sum(),
+            "Tax Expense (20%)": historical_df["Tax Expense (20%)"].sum(),
+            "Profit After Tax": historical_df["Profit After Tax"].sum()
+        }
+        df = pd.concat([df, pd.DataFrame([historical_total])], ignore_index=True)
+    
+    if not future_df.empty:
+        future_total = {
+            "Year": "Total (Future)",
+            "Type": "Summary",
+            "Revenue": future_df["Revenue"].sum(),
+            "Land Payment": future_df["Land Payment"].sum(),
+            "Construction": future_df["Construction"].sum(),
+            "SG&A": future_df["SG&A"].sum(),
+            "Profit Before Tax": future_df["Profit Before Tax"].sum(),
+            "Tax Expense (20%)": future_df["Tax Expense (20%)"].sum(),
+            "Profit After Tax": future_df["Profit After Tax"].sum()
+        }
+        df = pd.concat([df, pd.DataFrame([future_total])], ignore_index=True)
+    
+    # Add overall total
+    overall_total = {
+        "Year": "Total (Overall)",
+        "Type": "Summary",
+        "Revenue": df[df["Type"] != "Summary"]["Revenue"].sum(),
+        "Land Payment": df[df["Type"] != "Summary"]["Land Payment"].sum(),
+        "Construction": df[df["Type"] != "Summary"]["Construction"].sum(),
+        "SG&A": df[df["Type"] != "Summary"]["SG&A"].sum(),
+        "Profit Before Tax": df[df["Type"] != "Summary"]["Profit Before Tax"].sum(),
+        "Tax Expense (20%)": df[df["Type"] != "Summary"]["Tax Expense (20%)"].sum(),
+        "Profit After Tax": df[df["Type"] != "Summary"]["Profit After Tax"].sum()
+    }
+    df = pd.concat([df, pd.DataFrame([overall_total])], ignore_index=True)
 
     return df
 
@@ -427,13 +446,15 @@ def RNAV_Calculation(
     for i in range(n):
         year = current_year + i
         inflow = selling_progress_schedule[i]
-        outflow = (
-            construction_payment_schedule[i]
-            + sga_payment_schedule[i]
-            + tax_expense_schedule[i]
-            + land_use_right_payment_schedule[i]
-        )
-        net_cashflow = inflow + outflow
+        
+        # Break down outflow components
+        construction_cost = construction_payment_schedule[i]
+        sga_cost = sga_payment_schedule[i]
+        tax_cost = tax_expense_schedule[i]
+        land_cost = land_use_right_payment_schedule[i]
+        
+        total_outflow = construction_cost + sga_cost + tax_cost + land_cost
+        net_cashflow = inflow + total_outflow
         
         # Calculate discount factor (year 0 = current year)
         discount_factor = 1 / ((1 + wacc) ** i)
@@ -448,8 +469,12 @@ def RNAV_Calculation(
         data.append({
             "Year": year,
             "Year Index": i,
-            "Inflow (Selling Revenue)": inflow,
-            "Outflow (Cost + SG&A + Tax + Land)": outflow,
+            "Inflow (Revenue)": inflow,
+            "Construction Cost": construction_cost,
+            "Land Cost": land_cost,
+            "SG&A": sga_cost,
+            "Tax": tax_cost,
+            "Total Outflow": total_outflow,
             "Net Cash Flow": net_cashflow,
             "Discount Factor": discount_factor,
             "Discounted Cash Flow": discounted_cashflow,
@@ -462,8 +487,12 @@ def RNAV_Calculation(
     total_row = {
         "Year": "Total RNAV",
         "Year Index": np.nan,
-        "Inflow (Selling Revenue)": df["Inflow (Selling Revenue)"].sum(),
-        "Outflow (Cost + SG&A + Tax + Land)": df["Outflow (Cost + SG&A + Tax + Land)"].sum(),
+        "Inflow (Revenue)": df["Inflow (Revenue)"].sum(),
+        "Construction Cost": df["Construction Cost"].sum(),
+        "Land Cost": df["Land Cost"].sum(),
+        "SG&A": df["SG&A"].sum(),
+        "Tax": df["Tax"].sum(),
+        "Total Outflow": df["Total Outflow"].sum(),
         "Net Cash Flow": df["Net Cash Flow"].sum(),
         "Discount Factor": np.nan,
         "Discounted Cash Flow": total_rnav,
@@ -1010,7 +1039,7 @@ def search_project_online(project_name: str) -> dict:
         }
 
 
-def save_project_data(project_data, project_name):
+def save_project_data(project_data, project_name, rnav_value=None):
     """Save project data to the CSV database"""
     try:
         csv_path = os.path.join("data", "real_estate_projects.csv")
@@ -1023,9 +1052,10 @@ def save_project_data(project_data, project_name):
             columns = ['company_ticker', 'company_name', 'project_name', 'total_units', 
                       'average_selling_price', 'net_sellable_area', 'gross_floor_area', 
                       'land_area', 'construction_cost_per_sqm', 'land_cost_per_sqm',
-                      'construction_start_year', 'sale_start_year', 'construction_years',
-                      'sales_years', 'revenue_booking_start_year', 'project_completion_year',
-                      'sga_percentage', 'wacc_rate']
+                      'construction_start_year', 'sale_start_year', 'land_payment_year',
+                      'construction_years', 'sales_years', 'revenue_booking_start_year', 
+                      'project_completion_year', 'sga_percentage', 'wacc_rate', 'rnav_value',
+                      'last_updated']
             df = pd.DataFrame(columns=columns)
         
         # Prepare new row data
@@ -1042,12 +1072,15 @@ def save_project_data(project_data, project_name):
             'land_cost_per_sqm': project_data['land_cost_per_sqm'],
             'construction_start_year': project_data['construction_start_year'],
             'sale_start_year': project_data['sale_start_year'],
+            'land_payment_year': project_data['land_payment_year'],
             'construction_years': project_data['construction_years'],
             'sales_years': project_data['sales_years'],
             'revenue_booking_start_year': project_data['revenue_booking_start_year'],
             'project_completion_year': project_data['project_completion_year'],
             'sga_percentage': project_data['sga_percentage'],
-            'wacc_rate': project_data['wacc_rate']
+            'wacc_rate': project_data['wacc_rate'],
+            'rnav_value': rnav_value,
+            'last_updated': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         
         # Check if project already exists
@@ -1264,22 +1297,7 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col1:
         pass  # project_name already defined above
-    with col2:
-        if st.button("🆕 Manual Entry Mode"):
-            st.session_state['manual_mode'] = True
-            st.rerun()
     
-    # Manual entry mode
-    if st.session_state.get('manual_mode', False):
-        st.info("📝 Manual Entry Mode - Enter project details manually")
-        project_name = st.text_input("Project Name", value="My Manual Project")
-        selected_project_data = None
-        preload_data = None
-        
-        if st.button("🔄 Back to Database Selection"):
-            st.session_state['manual_mode'] = False
-            st.rerun()
-
     # Add Save/Load section
     st.sidebar.header("💾 Save & Load Projects")
     
@@ -1600,6 +1618,7 @@ def main():
                 preload_data.get('construction_cost_per_sqm') if preload_data else None, 
                 20_000_000
             ), 
+            
             key="construction_cost_per_sqm"
         )
         if preload_data and 'construction_cost_per_sqm' in preload_data:
@@ -1662,6 +1681,14 @@ def main():
             years_ago = current_year - start_year
             st.warning(f"⚠️ Start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
         
+        # Add land payment year input
+        land_payment_year = st.number_input(
+            "Land Payment Year", 
+            value=parse_int_with_preload("", preload_data.get('land_payment_year') if preload_data else None, start_year),
+            min_value=current_year - 10,  # Allow up to 10 years in the past
+            max_value=current_year + 20   # Allow up to 20 years in the future
+        )
+        
         # Separate construction and sales duration
         construction_years = st.number_input(
             "Number of Years for Construction", 
@@ -1692,6 +1719,7 @@ def main():
         with col1:
             st.write(f"• Construction: {start_year} - {start_year + construction_years - 1}")
             st.write(f"• Sales: {start_year} - {start_year + sales_years - 1}")
+            st.write(f"• Land Payment: {land_payment_year}")
         with col2:
             st.write(f"• Revenue Booking: {start_booking_year} - {complete_year}")
             st.write(f"• Project Duration: {complete_year - start_year + 1} years")
@@ -1713,6 +1741,60 @@ def main():
     # Add Save Project button with improved logic
     st.sidebar.markdown("---")
     if st.sidebar.button("💾 Save Current Project", type="primary"):
+        # Calculate RNAV value before saving
+        try:
+            # Calculate totals
+            total_revenue = nsa * asp
+            total_construction_cost = -gfa * construction_cost_per_sqm
+            total_land_cost = -land_area * land_cost_per_sqm
+            total_sga_cost = -total_revenue * sga_percent
+
+            # Generate schedules
+            selling_progress = selling_progress_schedule(
+                total_revenue/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+            )
+            sga_payment = sga_payment_schedule(
+                total_sga_cost/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+            )
+            construction_payment = construction_payment_schedule(
+                total_construction_cost/(10**9), int(current_year), int(start_year), int(construction_years), int(complete_year)
+            )
+            land_use_right_payment = land_use_right_payment_schedule_single_year(
+                total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+            )
+
+            df_pnl = generate_pnl_schedule(
+                total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
+                int(current_year), int(start_booking_year), int(complete_year)
+            )
+            
+            # Create tax expense schedule
+            num_years = int(complete_year) - int(current_year) + 1
+            tax_expense = []
+            for year in range(int(current_year), int(complete_year) + 1):
+                year_data = df_pnl[df_pnl["Year"] == year]
+                if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
+                    tax_value = year_data["Tax Expense (20%)"].iloc[0]
+                else:
+                    tax_value = 0.0
+                tax_expense.append(tax_value)
+
+            # Calculate RNAV
+            df_rnav = RNAV_Calculation(
+                selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
+            )
+
+            # Get RNAV value
+            total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
+            if not total_row.empty:
+                rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
+            else:
+                rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
+
+        except Exception as e:
+            st.sidebar.error(f"Error calculating RNAV: {str(e)}")
+            rnav_value = None
+
         # Determine company info
         if selected_project_data:
             # Use existing company info from selected project
@@ -1739,7 +1821,8 @@ def main():
             'construction_cost_per_sqm': construction_cost_per_sqm,
             'land_cost_per_sqm': land_cost_per_sqm,
             'construction_start_year': start_year,
-            'sale_start_year': start_year,  # Assuming same as construction start
+            'sale_start_year': start_year,
+            'land_payment_year': land_payment_year,
             'construction_years': construction_years,
             'sales_years': sales_years,
             'revenue_booking_start_year': start_booking_year,
@@ -1748,9 +1831,12 @@ def main():
             'wacc_rate': wacc_rate
         }
         
-        save_result = save_project_data(current_project_data, project_name)
+        save_result = save_project_data(current_project_data, project_name, rnav_value)
         if save_result["success"]:
-            st.sidebar.success(save_result["message"])
+            if rnav_value is not None:
+                st.sidebar.success(f"{save_result['message']}\n💰 RNAV: {format_vnd_billions(rnav_value)}")
+            else:
+                st.sidebar.success(save_result["message"])
             if save_result["action"] == "saved":
                 st.sidebar.info("💡 Project added to database. Refresh to see in dropdown.")
                 # Refresh the database after save
@@ -1795,7 +1881,7 @@ def main():
         total_construction_cost/(10**9), int(current_year), int(start_year), int(construction_years), int(complete_year)
     )
     land_use_right_payment = land_use_right_payment_schedule_single_year(
-        total_land_cost/(10**9), int(current_year), int(start_year), int(complete_year)
+        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
     )
 
     df_pnl = generate_pnl_schedule(
@@ -1803,9 +1889,38 @@ def main():
         int(current_year), int(start_booking_year), int(complete_year)
     )
     
-    # Get tax expense for RNAV calculation (only future years)
-    future_pnl = df_pnl[(df_pnl["Year"] != "Total (Future)") & (df_pnl["Year"] >= current_year)]
-    tax_expense = future_pnl["Tax Expense (20%)"].tolist()
+    # Create tax expense schedule that matches the time period from current_year to complete_year
+    num_years = int(complete_year) - int(current_year) + 1
+    
+    # Get tax expense for each year from current_year to complete_year
+    tax_expense = []
+    for year in range(int(current_year), int(complete_year) + 1):
+        # Find tax expense for this year in the P&L schedule
+        year_data = df_pnl[df_pnl["Year"] == year]
+        if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
+            tax_value = year_data["Tax Expense (20%)"].iloc[0]
+        else:
+            # If year not found in P&L (e.g., before booking period), use 0
+            tax_value = 0.0
+        tax_expense.append(tax_value)
+    
+    # Verify all schedules have the same length
+    schedules_info = {
+        "selling_progress": len(selling_progress),
+        "construction_payment": len(construction_payment), 
+        "sga_payment": len(sga_payment),
+        "tax_expense": len(tax_expense),
+        "land_use_right_payment": len(land_use_right_payment)
+    }
+    
+    # Debug information (remove in production)
+    st.sidebar.write("Schedule lengths:", schedules_info)
+    
+    # Ensure all schedules have the same length
+    expected_length = num_years
+    if not all(length == expected_length for length in schedules_info.values()):
+        st.error(f"Schedule length mismatch! Expected: {expected_length}, Got: {schedules_info}")
+        st.stop()
 
     st.header(f"Project: {project_name}")
 
@@ -1823,12 +1938,22 @@ def main():
         if len(df_pnl) > 0:
             # Create a styled version that highlights historical vs future
             def highlight_historical(row):
-                if row.name < len(df_pnl) - 1:  # Exclude total row
-                    year = df_pnl.iloc[row.name]["Year"]
-                    if isinstance(year, int) and year < current_year:
-                        return ['background-color: #f0f0f0'] * len(row)  # Gray for historical
-                    elif isinstance(year, int) and year >= current_year:
+                row_index = row.name
+                if row_index < len(df_pnl):
+                    year_type = df_pnl.iloc[row_index]["Type"]
+                    year_value = df_pnl.iloc[row_index]["Year"]
+                    
+                    if year_type == "Historical":
+                        return ['background-color: #ffebee'] * len(row)  # Light red for historical
+                    elif year_type == "Future":
                         return ['background-color: #e8f5e8'] * len(row)  # Light green for future
+                    elif year_type == "Summary":
+                        if "Historical" in str(year_value):
+                            return ['background-color: #ffcdd2; font-weight: bold'] * len(row)  # Darker red for historical total
+                        elif "Future" in str(year_value):
+                            return ['background-color: #c8e6c8; font-weight: bold'] * len(row)  # Darker green for future total
+                        else:
+                            return ['background-color: #e0e0e0; font-weight: bold'] * len(row)  # Gray for overall total
                 return [''] * len(row)
             
             st.dataframe(df_pnl.style.apply(highlight_historical, axis=1))
@@ -1836,9 +1961,28 @@ def main():
             # Add legend
             st.markdown("""
             **Legend:**
-            - 🔘 Gray background: Historical data
-            - 🟢 Green background: Future projections (included in RNAV)
+            - 🔴 Light red: Historical data (already occurred)
+            - 🟢 Light green: Future projections (for RNAV calculation)
+            - **Bold**: Summary totals
             """)
+            
+            # Show summary statistics
+            historical_data = df_pnl[df_pnl["Type"] == "Historical"]
+            future_data = df_pnl[df_pnl["Type"] == "Future"]
+            
+            if not historical_data.empty and not future_data.empty:
+                st.markdown("**📊 Period Breakdown:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Historical Years", len(historical_data))
+                    st.metric("Historical Revenue", f"{historical_data['Revenue'].sum():.1f}B VND")
+                with col2:
+                    st.metric("Future Years", len(future_data))
+                    st.metric("Future Revenue", f"{future_data['Revenue'].sum():.1f}B VND")
+            elif not future_data.empty:
+                st.info(f"📅 All {len(future_data)} years are in the future (RNAV includes all cash flows)")
+            elif not historical_data.empty:
+                st.warning(f"📅 All {len(historical_data)} years are historical (RNAV calculation may be limited)")
         else:
             st.dataframe(df_pnl)
     
@@ -1862,6 +2006,23 @@ def main():
         rnav_value = 0
     
     st.write(f"**{format_vnd_billions(rnav_value)}**")
+    
+    # Show RNAV history if available
+    if selected_project_data and 'rnav_value' in selected_project_data and selected_project_data['rnav_value'] is not None:
+        stored_rnav = selected_project_data['rnav_value']
+        last_updated = selected_project_data.get('last_updated', 'Unknown')
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Current RNAV", format_vnd_billions(rnav_value))
+        with col2:
+            st.metric(
+                "Stored RNAV", 
+                format_vnd_billions(stored_rnav),
+                delta=format_vnd_billions(rnav_value - stored_rnav)
+            )
+        
+        st.caption(f"📅 Last stored: {last_updated}")
     
     if start_year < current_year:
         st.info(f"💡 **Note:** Project started {current_year - start_year} years ago. RNAV calculation excludes historical cash flows and only considers future value from {current_year} onwards.")
@@ -1928,4 +2089,37 @@ def main():
         st.warning("No data available for chart display.")
 
 # ...existing code...
+
+def test_openai_connection(api_key: str, project_name: str = "Test Project"):
+    """
+    Test function to debug OpenAI API issues
+    """
+    if not api_key:
+        return {"error": "No API key provided"}
+    
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        
+        # Simple test prompt
+        test_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Say 'Hello, API is working!'"}],
+            max_tokens=50
+        )
+        
+        return {
+            "success": True,
+            "test_response": test_response.choices[0].message.content,
+            "model": "gpt-3.5-turbo"
+        }
+        
+    except Exception as e:
+        return {"error": f"OpenAI API test failed: {str(e)}"}
+
+# Ensure main function is called when the script runs
+if __name__ == "__main__":
+    main()
+else:
+    # For Streamlit, also call main when imported as a module
+    main()
 
