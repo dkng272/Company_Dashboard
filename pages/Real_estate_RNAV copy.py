@@ -5,7 +5,7 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 import re
-from datetime import datetime
+import datetime
 
 
 # Optional: If openai is not installed, run: pip install openai
@@ -74,26 +74,23 @@ def selling_progress_schedule(
     """
     Distribute total revenue evenly over a given number of years (num_years),
     starting from start_year. Output is aligned from current_year to complete_year.
+    Now allows start_year to be before current_year for historical tracking.
 
     Args:
-        nsa (float): Net sellable area (m²)
-        price_per_sqm (float): Selling price per m² (VND)
+        total_revenue (float): Total revenue
         current_year (int): Start year of the output array
-        start_year (int): Year selling begins
+        start_year (int): Year selling begins (can be < current_year)
         num_years (int): Number of years selling takes
         complete_year (int): Project completion year
 
     Returns:
         List[float]: Annual revenue array from current_year to complete_year
     """
-    if start_year < current_year:
-        raise ValueError("start_year must be >= current_year")
     if complete_year < start_year:
         raise ValueError("complete_year must be >= start_year")
     if (start_year + num_years - 1) > complete_year:
         raise ValueError("Selling period exceeds project completion year")
 
-    
     annual_revenue = total_revenue / num_years
 
     # Build full year list from current_year to complete_year
@@ -188,20 +185,18 @@ def construction_payment_schedule(
     """
     Distribute total construction cost evenly over num_years starting from start_year.
     Output is aligned from current_year to complete_year.
+    Now allows start_year to be before current_year for historical tracking.
 
     Args:
-        gfa (float): Gross floor area (m²)
-        cost_per_sqm (float): Construction cost per m² (VND)
+        total_cost (float): Total construction cost
         current_year (int): First year of the output array
-        start_year (int): Year construction begins
+        start_year (int): Year construction begins (can be < current_year)
         num_years (int): Number of years construction takes
         complete_year (int): Final year of the project
 
     Returns:
         List[float]: Construction cost per year aligned from current_year to complete_year
     """
-    if start_year < current_year:
-        raise ValueError("start_year must be >= current_year")
     if complete_year < start_year:
         raise ValueError("complete_year must be >= start_year")
     if (start_year + num_years - 1) > complete_year:
@@ -244,34 +239,31 @@ def sga_payment_schedule(
     complete_year: int
 ) -> list:
     """
-    Distribute total revenue evenly over a given number of years (num_years),
+    Distribute total SG&A evenly over a given number of years (num_years),
     starting from start_year. Output is aligned from current_year to complete_year.
+    Now allows start_year to be before current_year for historical tracking.
 
     Args:
-        nsa (float): Net sellable area (m²)
-        price_per_sqm (float): Selling price per m² (VND)
+        total_sga (float): Total SG&A cost
         current_year (int): Start year of the output array
-        start_year (int): Year selling begins
-        num_years (int): Number of years selling takes
+        start_year (int): Year SG&A begins (can be < current_year)
+        num_years (int): Number of years SG&A takes
         complete_year (int): Project completion year
 
     Returns:
-        List[float]: Annual revenue array from current_year to complete_year
+        List[float]: Annual SG&A array from current_year to complete_year
     """
-    if start_year < current_year:
-        raise ValueError("start_year must be >= current_year")
     if complete_year < start_year:
         raise ValueError("complete_year must be >= start_year")
     if (start_year + num_years - 1) > complete_year:
-        raise ValueError("Selling period exceeds project completion year")
+        raise ValueError("SG&A period exceeds project completion year")
 
-    
     annual_sga = total_sga / num_years
 
     # Build full year list from current_year to complete_year
     full_years = list(range(current_year, complete_year + 1))
 
-    # Create array with revenue in the selling years only
+    # Create array with SG&A in the active years only
     sga_by_year = [
         annual_sga if start_year <= year < start_year + num_years else 0.0
         for year in full_years
@@ -280,23 +272,6 @@ def sga_payment_schedule(
     return sga_by_year
 
 # %%
-# 🔄 Example usage:
-# if __name__ == "__main__":
-#     nsa = 120_000          # Net sellable area (m²)
-#     price = 50_000_000     # VND/m²
-#     sga_as_percent = 0.08
-#     current_year = 2025
-#     start_year = 2026
-#     num_years = 3
-#     complete_year = 2029
-
-#     result = sga_payment_schedule(nsa * price, sga_as_percent, current_year, start_year, num_years, complete_year)
-
-#     for i, value in enumerate(result):
-#         print(f"{current_year + i}: {value:,.0f} VND")
-
-# %%
-
 def generate_pnl_schedule(
     total_revenue: float,
     total_land_payment: float,
@@ -308,7 +283,7 @@ def generate_pnl_schedule(
 ) -> pd.DataFrame:
     """
     Generate a simplified P&L schedule from current_year to end_booking_year.
-    All values are 0 for years before start_booking_year.
+    Now shows both historical and future data with proper labeling.
 
     Args:
         total_revenue (float): Total revenue (VND)
@@ -322,32 +297,45 @@ def generate_pnl_schedule(
     Returns:
         pd.DataFrame: Year-by-year P&L table from current_year to end_booking_year with totals row
     """
-    if start_booking_year <= current_year - 1:
-        raise ValueError("start_booking_year must be greater than current_year")
     if end_booking_year < start_booking_year:
         raise ValueError("end_booking_year must be >= start_booking_year")
 
-    num_booking_years = end_booking_year - start_booking_year + 1
-    revenue_annual = total_revenue / num_booking_years
-    land_payment_annual = total_land_payment / num_booking_years
-    sga_annual = total_sga / num_booking_years
-    construction_annual = total_construction_payment / num_booking_years
+    # Calculate the actual booking period length
+    booking_start = max(start_booking_year, current_year)  # Don't book historical revenue
+    if booking_start > end_booking_year:
+        num_booking_years = 0
+        revenue_annual = 0
+    else:
+        num_booking_years = end_booking_year - booking_start + 1
+        revenue_annual = total_revenue / (end_booking_year - start_booking_year + 1)
+
+    # Distribute other costs over their full periods
+    total_booking_years = end_booking_year - start_booking_year + 1
+    land_payment_annual = total_land_payment / total_booking_years if total_booking_years > 0 else 0
+    sga_annual = total_sga / total_booking_years if total_booking_years > 0 else 0
+    construction_annual = total_construction_payment / total_booking_years if total_booking_years > 0 else 0
 
     pnl_data = []
     for year in range(current_year, end_booking_year + 1):
+        # Determine if this is historical or future
+        is_historical = year < current_year
+        year_type = "Historical" if is_historical else "Future"
+        
         if year < start_booking_year:
             revenue = land_cost = sga = pbt = tax = pat = construction = 0.0
         else:
-            revenue = revenue_annual
+            # Only book revenue for current and future years
+            revenue = revenue_annual if year >= current_year else 0.0
             land_cost = land_payment_annual
             sga = sga_annual
             construction = construction_annual
-            pbt = revenue + land_cost + sga + construction_annual
-            tax = -pbt * 0.2
+            pbt = revenue + land_cost + sga + construction
+            tax = -pbt * 0.2 if pbt > 0 else 0.0
             pat = pbt + tax
 
         pnl_data.append({
             "Year": year,
+            "Type": year_type,
             "Revenue": revenue,
             "Land Payment": land_cost,
             "Construction": construction,
@@ -359,16 +347,18 @@ def generate_pnl_schedule(
 
     df = pd.DataFrame(pnl_data)
     
-    # Add total row
+    # Add total row (only for future years for RNAV calculation)
+    future_df = df[df["Year"] >= current_year]
     total_row = {
-        "Year": "Total",
-        "Revenue": df["Revenue"].sum(),
-        "Land Payment": df["Land Payment"].sum(),
-        "Construction": df["Construction"].sum(),
-        "SG&A": df["SG&A"].sum(),
-        "Profit Before Tax": df["Profit Before Tax"].sum(),
-        "Tax Expense (20%)": df["Tax Expense (20%)"].sum(),
-        "Profit After Tax": df["Profit After Tax"].sum()
+        "Year": "Total (Future)",
+        "Type": "Summary",
+        "Revenue": future_df["Revenue"].sum(),
+        "Land Payment": future_df["Land Payment"].sum(),
+        "Construction": future_df["Construction"].sum(),
+        "SG&A": future_df["SG&A"].sum(),
+        "Profit Before Tax": future_df["Profit Before Tax"].sum(),
+        "Tax Expense (20%)": future_df["Tax Expense (20%)"].sum(),
+        "Profit After Tax": future_df["Profit After Tax"].sum()
     }
     
     # Use pd.concat instead of deprecated append
@@ -407,6 +397,7 @@ def RNAV_Calculation(
 ) -> pd.DataFrame:
     """
     Calculate RNAV using discounted cash flow method.
+    Only includes future cash flows (current year and beyond) for RNAV calculation.
 
     Args:
         selling_progress_schedule (list of float): Cash inflow per year
@@ -443,9 +434,16 @@ def RNAV_Calculation(
             + land_use_right_payment_schedule[i]
         )
         net_cashflow = inflow + outflow
+        
+        # Calculate discount factor (year 0 = current year)
         discount_factor = 1 / ((1 + wacc) ** i)
         discounted_cashflow = net_cashflow * discount_factor
+        
+        # Only add to RNAV if it's current year or future (i >= 0)
         total_rnav += discounted_cashflow
+
+        # Determine if this is a future cash flow for RNAV
+        included_in_rnav = True  # Since we start from current_year, all are included
 
         data.append({
             "Year": year,
@@ -454,13 +452,26 @@ def RNAV_Calculation(
             "Outflow (Cost + SG&A + Tax + Land)": outflow,
             "Net Cash Flow": net_cashflow,
             "Discount Factor": discount_factor,
-            "Discounted Cash Flow": discounted_cashflow
+            "Discounted Cash Flow": discounted_cashflow,
+            "Included in RNAV": "Yes" if included_in_rnav else "No"
         })
 
     df = pd.DataFrame(data)
-    df.loc["Total"] = df[["Discounted Cash Flow"]].sum(numeric_only=True)
-    df.at["Total", "Year"] = "Total"
-    df.at["Total", "Year Index"] = np.nan
+    
+    # Add total row
+    total_row = {
+        "Year": "Total RNAV",
+        "Year Index": np.nan,
+        "Inflow (Selling Revenue)": df["Inflow (Selling Revenue)"].sum(),
+        "Outflow (Cost + SG&A + Tax + Land)": df["Outflow (Cost + SG&A + Tax + Land)"].sum(),
+        "Net Cash Flow": df["Net Cash Flow"].sum(),
+        "Discount Factor": np.nan,
+        "Discounted Cash Flow": total_rnav,
+        "Included in RNAV": "Summary"
+    }
+    
+    df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+    
     return df
 
 
@@ -760,7 +771,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         ],
         "units_analysis": [
             r"Units Analysis:\s*(.*?)(?=\n|$)",
-            r"Unit Calculation:\s*(.*?)(?=\n|$)"
+            r"Unit Calculation:\s*(.*?)(=\n|$)"
         ]
     }
     
@@ -1157,6 +1168,9 @@ def get_project_data_from_database(company_ticker, project_name):
 
 def main():
     st.title("Real Estate RNAV Calculator 3.2PM")
+
+    # Get current calendar year automatically
+    current_calendar_year = datetime.datetime.now().year
 
     # Check for pre-loaded project data from dashboard
     preload_data = st.session_state.get('preload_project_data', None)
@@ -1632,14 +1646,21 @@ def main():
     with timeline_col:
         st.header("Timeline")
         
-        # Automatically set current year based on calendar year
-        current_year = datetime.now().year
-        st.info(f"📅 **Current Year:** {current_year} (automatically set)")
+        # Remove the current year input and use calendar year automatically
+        current_year = current_calendar_year
+        st.info(f"📅 **Current Year:** {current_year} (automatically set to calendar year)")
         
         start_year = st.number_input(
             "Construction/Sales Start Year", 
-            value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, current_year)
+            value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, current_year),
+            min_value=current_year - 10,  # Allow up to 10 years in the past
+            max_value=current_year + 20   # Allow up to 20 years in the future
         )
+        
+        # Show warning if start year is in the past
+        if start_year < current_year:
+            years_ago = current_year - start_year
+            st.warning(f"⚠️ Start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
         
         # Separate construction and sales duration
         construction_years = st.number_input(
@@ -1655,12 +1676,25 @@ def main():
         
         start_booking_year = st.number_input(
             "Revenue Booking Start Year", 
-            value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, 2027)
+            value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, max(current_year, start_year + 1)),
+            min_value=start_year
         )
         complete_year = st.number_input(
             "Project Completion Year", 
-            value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, 2030)
+            value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, start_year + 5),
+            min_value=start_year + 1
         )
+        
+        # Show timeline summary
+        st.markdown("---")
+        st.markdown("**📊 Project Timeline Summary:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"• Construction: {start_year} - {start_year + construction_years - 1}")
+            st.write(f"• Sales: {start_year} - {start_year + sales_years - 1}")
+        with col2:
+            st.write(f"• Revenue Booking: {start_booking_year} - {complete_year}")
+            st.write(f"• Project Duration: {complete_year - start_year + 1} years")
         
         st.markdown("---")
         sga_percent = st.number_input(
@@ -1766,127 +1800,132 @@ def main():
 
     df_pnl = generate_pnl_schedule(
         total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-        int(start_year), int(start_booking_year), int(complete_year)
+        int(current_year), int(start_booking_year), int(complete_year)
     )
-    tax_expense = df_pnl[df_pnl["Year"] != "Total"]["Tax Expense (20%)"].tolist()
-
     
+    # Get tax expense for RNAV calculation (only future years)
+    future_pnl = df_pnl[(df_pnl["Year"] != "Total (Future)") & (df_pnl["Year"] >= current_year)]
+    tax_expense = future_pnl["Tax Expense (20%)"].tolist()
+
     st.header(f"Project: {project_name}")
-
-    #Display selling progress as a list
-    #st.write("**Selling Progress (Billions VND):**")
-    #st.write(selling_progress)
-
-    # Display construction schedule as a list
-    #st.write("**Construction Schedule (Billions VND):**")
-    #st.write(construction_payment)
-
-    # Display SG&A schedule as a list
-    #st.write("**SG&A Schedule (Billions VND):**")
-    #st.write(sga_payment)
-
-    # Display land use right payment schedule as a list
-    #st.write("**Land Use Right Payment Schedule (Single Year, Billions VND):**")
-    #st.write(land_use_right_payment)    
 
     df_rnav = RNAV_Calculation(
         selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
     )
-
-
-
 
     # Create two parallel columns for P&L Schedule and RNAV Calculation
     pnl_col, rnav_col = st.columns(2)
     
     with pnl_col:
         st.header("P&L Schedule")
-        st.dataframe(df_pnl)
+        
+        # Color-code the dataframe display
+        if len(df_pnl) > 0:
+            # Create a styled version that highlights historical vs future
+            def highlight_historical(row):
+                if row.name < len(df_pnl) - 1:  # Exclude total row
+                    year = df_pnl.iloc[row.name]["Year"]
+                    if isinstance(year, int) and year < current_year:
+                        return ['background-color: #f0f0f0'] * len(row)  # Gray for historical
+                    elif isinstance(year, int) and year >= current_year:
+                        return ['background-color: #e8f5e8'] * len(row)  # Light green for future
+                return [''] * len(row)
+            
+            st.dataframe(df_pnl.style.apply(highlight_historical, axis=1))
+            
+            # Add legend
+            st.markdown("""
+            **Legend:**
+            - 🔘 Gray background: Historical data
+            - 🟢 Green background: Future projections (included in RNAV)
+            """)
+        else:
+            st.dataframe(df_pnl)
     
     with rnav_col:
         st.header("RNAV Calculation")
         st.dataframe(df_rnav)
+        
+        st.info("💡 **Note:** RNAV calculation only includes cash flows from current year onwards.")
 
     st.subheader("RNAV (Total Discounted Cash Flow)")
-    rnav_value = df_rnav.loc['Total', 'Discounted Cash Flow'] * (10**9)
+    
+    # Get RNAV value from the total row
+    try:
+        total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
+        if not total_row.empty:
+            rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
+        else:
+            # Fallback to old method
+            rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
+    except:
+        rnav_value = 0
+    
     st.write(f"**{format_vnd_billions(rnav_value)}**")
+    
+    if start_year < current_year:
+        st.info(f"💡 **Note:** Project started {current_year - start_year} years ago. RNAV calculation excludes historical cash flows and only considers future value from {current_year} onwards.")
 
     st.header("Cash Flow Chart")
     # Filter out the "Total" row and create chart with years on x-axis
-    chart_data = df_rnav[df_rnav["Year"] != "Total"].copy()
-    # Ensure Year column is integer for clean display
-    chart_data["Year"] = chart_data["Year"].astype(int)
-    chart_data = chart_data.set_index("Year")[["Net Cash Flow", "Discounted Cash Flow"]]
+    chart_data = df_rnav[~df_rnav["Year"].isin(["Total RNAV"])].copy()
     
-    # Use plotly for better control over x-axis formatting
-    import plotly.express as px
-    import plotly.graph_objects as go
-    
-    # Create plotly chart with clean year formatting
-    fig = go.Figure()
-    
-    # Add Net Cash Flow line
-    fig.add_trace(go.Scatter(
-        x=chart_data.index,
-        y=chart_data["Net Cash Flow"],
-        mode='lines+markers',
-        name='Net Cash Flow',
-        line=dict(color='blue')
-    ))
-    
-    # Add Discounted Cash Flow line
-    fig.add_trace(go.Scatter(
-        x=chart_data.index,
-        y=chart_data["Discounted Cash Flow"],
-        mode='lines+markers',
-        name='Discounted Cash Flow',
-        line=dict(color='red')
-    ))
-    
-    # Update layout for clean year display
-    fig.update_layout(
-        title="Cash Flow Analysis",
-        xaxis_title="Year",
-        yaxis_title="Cash Flow (Billions VND)",
-        xaxis=dict(
-            tickmode='linear',
-            tick0=chart_data.index.min(),
-            dtick=1,
-            tickformat='d'  # Display as integer without decimals
-        ),
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-def test_openai_connection(api_key: str, project_name: str = "Test Project"):
-    """
-    Test function to debug OpenAI API issues
-    """
-    if not api_key:
-        return {"error": "No API key provided"}
-    
-    try:
-        client = openai.OpenAI(api_key=api_key)
+    if len(chart_data) > 0:
+        # Ensure Year column is integer for clean display
+        chart_data["Year"] = chart_data["Year"].astype(int)
+        chart_data = chart_data.set_index("Year")[["Net Cash Flow", "Discounted Cash Flow"]]
         
-        # Simple test prompt
-        test_response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": "Say 'Hello, API is working!'"}],
-            max_tokens=50
+        # Use plotly for better control over x-axis formatting
+        import plotly.express as px
+        import plotly.graph_objects as go
+        
+        # Create plotly chart with clean year formatting
+        fig = go.Figure()
+        
+        # Add Net Cash Flow line
+        fig.add_trace(go.Scatter(
+            x=chart_data.index,
+            y=chart_data["Net Cash Flow"],
+            mode='lines+markers',
+            name='Net Cash Flow',
+            line=dict(color='blue')
+        ))
+        
+        # Add Discounted Cash Flow line
+        fig.add_trace(go.Scatter(
+            x=chart_data.index,
+            y=chart_data["Discounted Cash Flow"],
+            mode='lines+markers',
+            name='Discounted Cash Flow',
+            line=dict(color='red')
+        ))
+        
+        # Add vertical line at current year
+        fig.add_vline(
+            x=current_year, 
+            line_dash="dash", 
+            line_color="green",
+            annotation_text=f"Current Year ({current_year})",
+            annotation_position="top"
         )
         
-        return {
-            "success": True,
-            "test_response": test_response.choices[0].message.content,
-            "model": "gpt-3.5-turbo"
-        }
+        # Update layout for clean year display
+        fig.update_layout(
+            title="Cash Flow Analysis",
+            xaxis_title="Year",
+            yaxis_title="Cash Flow (Billions VND)",
+            xaxis=dict(
+                tickmode='linear',
+                tick0=chart_data.index.min(),
+                dtick=1,
+                tickformat='d'  # Display as integer without decimals
+            ),
+            hovermode='x unified'
+        )
         
-    except Exception as e:
-        return {"error": f"OpenAI API test failed: {str(e)}"}
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No data available for chart display.")
 
-
-
-if __name__ == "__main__":
-    main()
+# ...existing code...
 
