@@ -837,43 +837,60 @@ def search_project_online(project_name: str) -> dict:
         
         # Enhanced search queries targeting specific Vietnamese real estate websites
         search_queries = [
-            # Basic project information from batdongsan.com
+            # Basic project information from batdongsan.com.vn
             f'site:batdongsan.com.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
             f'site:batdongsan.com.vn "{project_name}" real estate project basic information developer',
+            
+            # Basic project information from chotot.com
+            f'site:chotot.com "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:chotot.com "{project_name}" real estate project basic information developer',
+            
+            # Basic project information from nhadat247.com.vn
+            f'site:nhadat247.com.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:nhadat247.com.vn "{project_name}" real estate project basic information developer',
+            
+            # Basic project information from homedy.com
+            f'site:homedy.com "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:homedy.com "{project_name}" real estate project basic information developer',
             
             # Basic project information from rever.vn
             f'site:rever.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
             f'site:rever.vn "{project_name}" real estate project basic information developer',
             
-            # Net sellable area and project scale from batdongsan.com
-            f'site:batdongsan.com.vn "{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
-            f'site:batdongsan.com.vn "{project_name}" "diện tích" "căn hộ" "tổng số"',
+            # Basic project information from onehousing.vn
+            f'site:onehousing.vn "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:onehousing.vn "{project_name}" real estate project basic information developer',
             
-            # Net sellable area and project scale from rever.vn
-            f'site:rever.vn "{project_name}" diện tích bán hàng căn hộ tổng diện tích quy mô',
-            f'site:rever.vn "{project_name}" "diện tích" "căn hộ" "tổng số"',
+            # Basic project information from meeyland.com
+            f'site:meeyland.com "{project_name}" dự án bất động sản thông tin cơ bản chủ đầu tư',
+            f'site:meeyland.com "{project_name}" real estate project basic information developer',
             
-            # Average selling price from batdongsan.com
-            f'site:batdongsan.com.vn "{project_name}" giá bán trung bình giá m2 bảng giá',
+            # Net sellable area and project scale queries
+            f'site:batdongsan.com.vn "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:chotot.com "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:nhadat247.com.vn "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:homedy.com "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:rever.vn "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:onehousing.vn "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            f'site:meeyland.com "{project_name}" "diện tích" "căn hộ" "tổng số" quy mô',
+            
+            # Average selling price queries
             f'site:batdongsan.com.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
-            
-            # Average selling price from rever.vn
-            f'site:rever.vn "{project_name}" giá bán trung bình giá m2 bảng giá',
+            f'site:chotot.com "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            f'site:nhadat247.com.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            f'site:homedy.com "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
             f'site:rever.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            f'site:onehousing.vn "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
+            f'site:meeyland.com "{project_name}" "giá bán" "triệu/m2" "VND/m2" bảng giá',
             
-            # Detailed specifications and pricing from batdongsan.com
+            # Detailed specifications and pricing queries
             f'site:batdongsan.com.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
-            f'site:batdongsan.com.vn "{project_name}" specifications floor area price list',
-            
-            # Detailed specifications and pricing from rever.vn
+            f'site:chotot.com "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'site:nhadat247.com.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'site:homedy.com "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
             f'site:rever.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
-            f'site:rever.vn "{project_name}" specifications floor area price list',
-            
-            # Market analysis from batdongsan.com
-            f'site:batdongsan.com.vn "{project_name}" phân tích thị trường so sánh giá',
-            
-            # Market analysis from rever.vn
-            f'site:rever.vn "{project_name}" phân tích thị trường so sánh giá'
+            f'site:onehousing.vn "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả',
+            f'site:meeyland.com "{project_name}" thông số kỹ thuật diện tích căn hộ giá cả'
         ]
         
         all_results = []
@@ -886,7 +903,7 @@ def search_project_online(project_name: str) -> dict:
                 result = service.cse().list(
                     q=query,
                     cx=google_search_engine_id,
-                    num=3,  # Reduced number per query since we're targeting specific sites
+                    num=2,  # Reduced to 2 per query since we have more sites now
                     lr='lang_vi|lang_en',  # Vietnamese and English
                     dateRestrict='y3',  # Results from last 3 years for more data
                     safe='medium',
@@ -917,8 +934,18 @@ def search_project_online(project_name: str) -> dict:
                         link = item.get('link', '').lower()
                         if 'batdongsan.com' in link:
                             source_site = "batdongsan.com.vn"
+                        elif 'chotot.com' in link:
+                            source_site = "chotot.com"
+                        elif 'nhadat247.com' in link:
+                            source_site = "nhadat247.com.vn"
+                        elif 'homedy.com' in link:
+                            source_site = "homedy.com"
                         elif 'rever.vn' in link:
                             source_site = "rever.vn"
+                        elif 'onehousing.vn' in link:
+                            source_site = "onehousing.vn"
+                        elif 'meeyland.com' in link:
+                            source_site = "meeyland.com"
                         
                         all_results.append({
                             'title': item.get('title', ''),
@@ -952,7 +979,7 @@ def search_project_online(project_name: str) -> dict:
         
         return {
             "status": "success",
-            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries, targeting batdongsan.com.vn and rever.vn",
+            "message": f"Found {len(all_results)} search results from {len(search_queries)} queries, targeting 7 Vietnamese real estate websites",
             "results": all_results,
             "queries_attempted": len(search_queries),
             "successful_queries": len([r for r in all_results if r]),
