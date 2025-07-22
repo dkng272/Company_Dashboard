@@ -1316,6 +1316,30 @@ def main():
     land_area_suggest = project_info.get("land_area", "")
     land_cost_suggest = project_info.get("land_cost_per_sqm", "")
 
+    # Helper function for float parsing with preload and fallback
+    def parse_float_with_preload(ai_suggest, preload_value, default):
+        try:
+            if preload_value is not None:
+                return float(preload_value)
+            elif ai_suggest:
+                return float(str(ai_suggest).replace(",", "").replace(".", ""))
+            else:
+                return float(default)
+        except Exception:
+            return float(default)
+
+    # Helper function for int parsing with preload and fallback
+    def parse_int_with_preload(ai_suggest, preload_value, default):
+        try:
+            if preload_value is not None:
+                return int(preload_value)
+            elif ai_suggest:
+                return int(str(ai_suggest).replace(",", "").replace(".", ""))
+            else:
+                return int(default)
+        except Exception:
+            return int(default)
+
     # Create two parallel columns for Project Parameters and Timeline
     param_col, timeline_col = st.columns(2)
 
