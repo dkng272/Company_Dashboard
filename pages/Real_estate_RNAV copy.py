@@ -628,7 +628,8 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:\n\n"
         f"Info: [Detailed project description with current status, location, and developer]\n"
         f"Average Selling Price: 100000000\n"
-        f"Net Sellable Area: 200000\n"
+        f"Total Units: 1500\n"
+        f"Average Unit Size: 80\n"
         f"Gross Floor Area: 300000\n"
         f"Construction Cost per sqm: 20000000\n"
         f"Land Area: 50000\n"
@@ -636,12 +637,13 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
         f"Sources: [List key sources from search results or 'Training data + market estimates']\n"
         f"Confidence: [High/Medium/Low based on available data]\n"
         f"Price Analysis: [Explain your price calculation: 'Found price per sqm directly' OR 'Calculated from unit price X VND ÷ unit size Y m² = Z VND/m²' OR 'Market estimate based on location/type']\n"
-        f"NSA Analysis: [Explain your NSA calculation: 'Found NSA directly' OR 'Calculated from X units × Y m²/unit = Z m²' OR 'Estimated based on project type and scale']\n\n"
+        f"Units Analysis: [Explain your units calculation: 'Found total units directly' OR 'Estimated based on project scale and type']\n\n"
         f"IMPORTANT NOTES:\n"
         f"- For 'Average Selling Price', provide ONLY the price per m² in VND (numbers only, no commas/currency)\n"
-        f"- For 'Net Sellable Area', provide ONLY the total sellable area in m² (numbers only)\n"
+        f"- For 'Total Units', provide ONLY the number of units (numbers only)\n"
+        f"- For 'Average Unit Size', provide ONLY the average size per unit in m² (numbers only)\n"
         f"- If you find unit prices, convert them to price per m² using typical unit sizes for that project type\n"
-        f"- If you find unit count but no NSA, calculate NSA using appropriate unit sizes\n"
+        f"- If you find NSA but no unit count, estimate units using: Total Units = NSA ÷ Average Unit Size\n"
         f"- Use Vietnamese real estate market standards (2024-2025) for estimates when specific data is not available\n"
         f"- Apartment projects: typical unit size 60-90m², luxury: 80-150m², villa: 150-400m²\n"
         f"- If uncertain about unit size, use conservative estimates: apartments 80m², villas 200m²\n"
@@ -680,14 +682,16 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     result = {
         "basic_info": "",
         "asp": "",
-        "nsa": "",
+        "total_units": "",
+        "average_unit_size": "",
         "gfa": "",
         "construction_cost_per_sqm": "",
         "land_area": "",
         "land_cost_per_sqm": "",
         "sources": "",
         "confidence": "",
-        "price_analysis": "",  # New field for price calculation explanation
+        "price_analysis": "",
+        "units_analysis": "",
         "raw_content": content,
         "model_used": model,
         "search_results_count": len(search_results.get("results", [])),
@@ -698,9 +702,9 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
     # Enhanced regex patterns with multiple variations
     patterns = {
         "basic_info": [
-            r"Info:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)",
-            r"Project Info:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)",
-            r"Description:\s*(.*?)(?=Average Selling Price:|Net Sellable Area:|$)"
+            r"Info:\s*(.*?)(?=Average Selling Price:|Total Units:|$)",
+            r"Project Info:\s*(.*?)(?=Average Selling Price:|Total Units:|$)",
+            r"Description:\s*(.*?)(?=Average Selling Price:|Total Units:|$)"
         ],
         "asp": [
             r"Average Selling Price:\s*([0-9,\.]+)",
@@ -708,10 +712,15 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
             r"Price per sqm:\s*([0-9,\.]+)",
             r"ASP:\s*([0-9,\.]+)"
         ],
-        "nsa": [
-            r"Net Sellable Area:\s*([0-9,\.]+)",
-            r"Sellable Area:\s*([0-9,\.]+)",
-            r"NSA:\s*([0-9,\.]+)"
+        "total_units": [
+            r"Total Units:\s*([0-9,\.]+)",
+            r"Number of Units:\s*([0-9,\.]+)",
+            r"Units:\s*([0-9,\.]+)"
+        ],
+        "average_unit_size": [
+            r"Average Unit Size:\s*([0-9,\.]+)",
+            r"Unit Size:\s*([0-9,\.]+)",
+            r"Average Size:\s*([0-9,\.]+)"
         ],
         "gfa": [
             r"Gross Floor Area:\s*([0-9,\.]+)",
@@ -744,9 +753,13 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
             r"Reliability:\s*(.*?)(?=Price Analysis:|\n|$)"
         ],
         "price_analysis": [
-            r"Price Analysis:\s*(.*?)(?=\n|$)",
-            r"Pricing Method:\s*(.*?)(?=\n|$)",
-            r"Price Calculation:\s*(.*?)(?=\n|$)"
+            r"Price Analysis:\s*(.*?)(?=Units Analysis:|\n|$)",
+            r"Pricing Method:\s*(.*?)(?=Units Analysis:|\n|$)",
+            r"Price Calculation:\s*(.*?)(?=Units Analysis:|\n|$)"
+        ],
+        "units_analysis": [
+            r"Units Analysis:\s*(.*?)(?=\n|$)",
+            r"Unit Calculation:\s*(.*?)(?=\n|$)"
         ]
     }
     
@@ -759,7 +772,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 value = m.group(1).strip()
                 
                 # Clean up numeric values more aggressively
-                if key not in ["basic_info", "sources", "confidence", "price_analysis"] and value:
+                if key not in ["basic_info", "sources", "confidence", "price_analysis", "units_analysis"] and value:
                     # Remove all non-numeric characters except dots
                     cleaned_value = re.sub(r'[^\d\.]', '', value)
                     # Handle multiple dots (keep only the first one)
@@ -775,11 +788,12 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                 break
         
         # Fallback extraction for numeric fields if patterns fail
-        if not found and key not in ["basic_info", "sources", "confidence", "price_analysis"]:
+        if not found and key not in ["basic_info", "sources", "confidence", "price_analysis", "units_analysis"]:
             # Try to find any number in the vicinity of the field name
             field_names = {
                 "asp": ["selling price", "price per sqm", "average price"],
-                "nsa": ["sellable area", "net area", "nsa"],
+                "total_units": ["total units", "number of units", "units"],
+                "average_unit_size": ["unit size", "average size", "size per unit"],
                 "gfa": ["floor area", "gross area", "gfa", "total area"],
                 "construction_cost_per_sqm": ["construction cost", "building cost"],
                 "land_area": ["land area", "site area", "plot area"],
@@ -795,7 +809,7 @@ def get_project_basic_info(project_name: str, openai_api_key: str) -> dict:
                     if value:
                         result[key] = value
                         break
-    
+
     # Add debug information for troubleshooting
     result["parsing_debug"] = {
         "content_length": len(content),
@@ -1133,7 +1147,8 @@ def main():
             return default
 
     # Suggestion values from ChatGPT
-    nsa_suggest = project_info.get("nsa", "")
+    total_units_suggest = project_info.get("total_units", "")
+    average_unit_size_suggest = project_info.get("average_unit_size", "")
     asp_suggest = project_info.get("asp", "")
     gfa_suggest = project_info.get("gfa", "")
     construction_cost_suggest = project_info.get("construction_cost_per_sqm", "")
@@ -1146,12 +1161,23 @@ def main():
     with param_col:
         st.header("Project Parameters")
         
-        # Net Sellable Area
-        nsa = st.number_input("Net Sellable Area (m²)", value=parse_float(nsa_suggest, 200_000), key="nsa")
-        if nsa_suggest:
-            st.caption(f"💡 AI suggestion: **{format_number_with_commas(nsa_suggest)}** m²")
+        # Total Units
+        total_units = st.number_input("Total Units", value=parse_float(total_units_suggest, 2500), key="total_units")
+        if total_units_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(total_units_suggest)}** units")
         else:
             st.caption("💡 AI suggestion: _none_")
+        
+        # Average Unit Size
+        average_unit_size = st.number_input("Average Unit Size (m²)", value=parse_float(average_unit_size_suggest, 80), key="average_unit_size")
+        if average_unit_size_suggest:
+            st.caption(f"💡 AI suggestion: **{format_number_with_commas(average_unit_size_suggest)}** m²")
+        else:
+            st.caption("💡 AI suggestion: _none_")
+        
+        # Calculate NSA from units and unit size
+        nsa = total_units * average_unit_size
+        st.info(f"📊 **Calculated Net Sellable Area:** {format_number_with_commas(str(int(nsa)))} m²")
         
         # Average Selling Price
         asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 100_000_000), key="asp")
