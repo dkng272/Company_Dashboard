@@ -998,11 +998,145 @@ def search_project_online(project_name: str) -> dict:
         }
 
 
+def save_project_data(project_data, project_name):
+    """Save project data to the CSV database"""
+    try:
+        csv_path = os.path.join("data", "real_estate_projects.csv")
+        
+        # Load existing data
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+        else:
+            # Create new dataframe with required columns
+            columns = ['company_ticker', 'company_name', 'project_name', 'total_units', 
+                      'average_selling_price', 'net_sellable_area', 'gross_floor_area', 
+                      'land_area', 'construction_cost_per_sqm', 'land_cost_per_sqm',
+                      'construction_start_year', 'sale_start_year', 'construction_years',
+                      'sales_years', 'revenue_booking_start_year', 'project_completion_year',
+                      'sga_percentage', 'wacc_rate']
+            df = pd.DataFrame(columns=columns)
+        
+        # Prepare new row data
+        new_row = {
+            'company_ticker': project_data.get('company_ticker', 'MANUAL'),
+            'company_name': project_data.get('company_name', 'Manual Entry'),
+            'project_name': project_name,
+            'total_units': project_data['total_units'],
+            'average_selling_price': project_data['average_selling_price'],
+            'net_sellable_area': project_data['total_units'] * project_data['average_unit_size'],
+            'gross_floor_area': project_data['gross_floor_area'],
+            'land_area': project_data['land_area'],
+            'construction_cost_per_sqm': project_data['construction_cost_per_sqm'],
+            'land_cost_per_sqm': project_data['land_cost_per_sqm'],
+            'construction_start_year': project_data['construction_start_year'],
+            'sale_start_year': project_data['sale_start_year'],
+            'construction_years': project_data['construction_years'],
+            'sales_years': project_data['sales_years'],
+            'revenue_booking_start_year': project_data['revenue_booking_start_year'],
+            'project_completion_year': project_data['project_completion_year'],
+            'sga_percentage': project_data['sga_percentage'],
+            'wacc_rate': project_data['wacc_rate']
+        }
+        
+        # Check if project already exists
+        existing_index = df[(df['project_name'] == project_name) & 
+                           (df['company_ticker'] == new_row['company_ticker'])].index
+        
+        if len(existing_index) > 0:
+            # Update existing project
+            for col, value in new_row.items():
+                df.loc[existing_index[0], col] = value
+            action = "updated"
+        else:
+            # Add new project
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            action = "saved"
+        
+        # Save to CSV
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        df.to_csv(csv_path, index=False)
+        
+        return {"success": True, "message": f"Project {action} successfully!", "action": action}
+        
+    except Exception as e:
+        return {"success": False, "message": f"Error saving project: {str(e)}"}
+
+def load_project_data(project_name):
+    """Load project data from the CSV database"""
+    try:
+        csv_path = os.path.join("data", "real_estate_projects.csv")
+        df = pd.read_csv(csv_path)
+        
+        # Find project
+        project_rows = df[df['project_name'] == project_name]
+        
+        if project_rows.empty:
+            return {"success": False, "message": f"Project '{project_name}' not found in database"}
+        
+        if len(project_rows) > 1:
+            # Multiple companies have projects with same name
+            st.warning(f"Multiple projects found with name '{project_name}'. Using the first one.")
+        
+        project_data = project_rows.iloc[0].to_dict()
+        
+        # Calculate average unit size from NSA and total units
+        if project_data['total_units'] > 0:
+            project_data['average_unit_size'] = project_data['net_sellable_area'] / project_data['total_units']
+        else:
+            project_data['average_unit_size'] = 80  # default
+        
+        return {"success": True, "data": project_data, "message": "Project loaded successfully!"}
+        
+    except FileNotFoundError:
+        return {"success": False, "message": "Project database not found"}
+    except Exception as e:
+        return {"success": False, "message": f"Error loading project: {str(e)}"}
+
+def get_all_project_names():
+    """Get list of all project names from database"""
+    try:
+        csv_path = os.path.join("data", "real_estate_projects.csv")
+        df = pd.read_csv(csv_path)
+        return df['project_name'].unique().tolist()
+    except:
+        return []
+
 def main():
     st.title("Real Estate RNAV Calculator 3.2PM")
 
+    # Check for pre-loaded project data from dashboard
+    preload_data = st.session_state.get('preload_project_data', None)
+    preload_name = st.session_state.get('preload_project_name', None)
+
     # Add project name input
-    project_name = st.text_input("Project Name", value="My Project")
+    if preload_name:
+        project_name = st.text_input("Project Name", value=preload_name)
+        st.success(f"✅ Project data pre-loaded from dashboard: {preload_name}")
+    else:
+        project_name = st.text_input("Project Name", value="My Project")
+
+    # Add Save/Load section
+    st.sidebar.header("💾 Save & Load Projects")
+    
+    # Load existing project
+    existing_projects = get_all_project_names()
+    if existing_projects:
+        selected_load_project = st.sidebar.selectbox(
+            "Load Existing Project:",
+            options=["Select project..."] + existing_projects,
+            index=0
+        )
+        
+        if st.sidebar.button("📂 Load Selected Project"):
+            if selected_load_project != "Select project...":
+                load_result = load_project_data(selected_load_project)
+                if load_result["success"]:
+                    st.session_state['preload_project_data'] = load_result["data"]
+                    st.session_state['preload_project_name'] = selected_load_project
+                    st.sidebar.success(load_result["message"])
+                    st.rerun()
+                else:
+                    st.sidebar.error(load_result["message"])
 
     # Set your OpenAI API key if available
     if api_key:
@@ -1189,15 +1323,27 @@ def main():
         st.header("Project Parameters")
         
         # Total Units
-        total_units = st.number_input("Total Units", value=parse_float(total_units_suggest, 2500), key="total_units")
-        if total_units_suggest:
+        total_units = st.number_input(
+            "Total Units", 
+            value=parse_float_with_preload(total_units_suggest, preload_data.get('total_units') if preload_data else None, 2500), 
+            key="total_units"
+        )
+        if preload_data and 'total_units' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['total_units'])))}** units")
+        elif total_units_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(total_units_suggest)}** units")
         else:
             st.caption("💡 AI suggestion: _none_")
         
         # Average Unit Size
-        average_unit_size = st.number_input("Average Unit Size (m²)", value=parse_float(average_unit_size_suggest, 80), key="average_unit_size")
-        if average_unit_size_suggest:
+        average_unit_size = st.number_input(
+            "Average Unit Size (m²)", 
+            value=parse_float_with_preload(average_unit_size_suggest, preload_data.get('average_unit_size') if preload_data else None, 80), 
+            key="average_unit_size"
+        )
+        if preload_data and 'average_unit_size' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['average_unit_size'])))}** m²")
+        elif average_unit_size_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(average_unit_size_suggest)}** m²")
         else:
             st.caption("💡 AI suggestion: _none_")
@@ -1207,60 +1353,157 @@ def main():
         st.info(f"📊 **Calculated Net Sellable Area:** {format_number_with_commas(str(int(nsa)))} m²")
         
         # Average Selling Price
-        asp = st.number_input("Average Selling Price (VND/m²)", value=parse_float(asp_suggest, 100_000_000), key="asp")
-        if asp_suggest:
+        asp = st.number_input(
+            "Average Selling Price (VND/m²)", 
+            value=parse_float_with_preload(asp_suggest, preload_data.get('average_selling_price') if preload_data else None, 100_000_000), 
+            key="asp"
+        )
+        if preload_data and 'average_selling_price' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['average_selling_price'])))}** VND/m²")
+        elif asp_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(asp_suggest)}** VND/m²")
         else:
             st.caption("💡 AI suggestion: _none_")
         
         # Gross Floor Area
-        gfa = st.number_input("Gross Floor Area (m²)", value=parse_float(gfa_suggest, 300_000), key="gfa")
-        if gfa_suggest:
+        gfa = st.number_input(
+            "Gross Floor Area (m²)", 
+            value=parse_float_with_preload(gfa_suggest, preload_data.get('gross_floor_area') if preload_data else None, 300_000), 
+            key="gfa"
+        )
+        if preload_data and 'gross_floor_area' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['gross_floor_area'])))}** m²")
+        elif gfa_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(gfa_suggest)}** m²")
         else:
             st.caption("💡 AI suggestion: _none_")
         
         # Construction Cost per sqm
-        construction_cost_per_sqm = st.number_input("Construction Cost per m² (VND)", value=parse_float(construction_cost_suggest, 20_000_000), key="construction_cost_per_sqm")
-        if construction_cost_suggest:
+        construction_cost_per_sqm = st.number_input(
+            "Construction Cost per m² (VND)", 
+            value=parse_float_with_preload(construction_cost_suggest, preload_data.get('construction_cost_per_sqm') if preload_data else None, 20_000_000), 
+            key="construction_cost_per_sqm"
+        )
+        if preload_data and 'construction_cost_per_sqm' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['construction_cost_per_sqm'])))}** VND/m²")
+        elif construction_cost_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(construction_cost_suggest)}** VND/m²")
         else:
             st.caption("💡 AI suggestion: _none_")
         
         # Land Area
-        land_area = st.number_input("Land Area (m²)", value=parse_float(land_area_suggest, 50_000), key="land_area")
-        if land_area_suggest:
+        land_area = st.number_input(
+            "Land Area (m²)", 
+            value=parse_float_with_preload(land_area_suggest, preload_data.get('land_area') if preload_data else None, 50_000), 
+            key="land_area"
+        )
+        if preload_data and 'land_area' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['land_area'])))}** m²")
+        elif land_area_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(land_area_suggest)}** m²")
         else:
             st.caption("💡 AI suggestion: _none_")
         
         # Land Cost per sqm
-        land_cost_per_sqm = st.number_input("Land Cost per m² (VND)", value=parse_float(land_cost_suggest, 50_000_000), key="land_cost_per_sqm")
-        if land_cost_suggest:
+        land_cost_per_sqm = st.number_input(
+            "Land Cost per m² (VND)", 
+            value=parse_float_with_preload(land_cost_suggest, preload_data.get('land_cost_per_sqm') if preload_data else None, 50_000_000), 
+            key="land_cost_per_sqm"
+        )
+        if preload_data and 'land_cost_per_sqm' in preload_data:
+            st.caption(f"📊 Pre-loaded: **{format_number_with_commas(str(int(preload_data['land_cost_per_sqm'])))}** VND/m²")
+        elif land_cost_suggest:
             st.caption(f"💡 AI suggestion: **{format_number_with_commas(land_cost_suggest)}** VND/m²")
         else:
             st.caption("💡 AI suggestion: _none_")
 
-        # Button to copy all suggested values
-        st.markdown("---")
-        if st.button("📋 Copy All Suggested Values"):
-            st.warning("Please manually copy the suggested values into the textboxes above. (Streamlit does not allow programmatic update after widget creation.)")
-
     with timeline_col:
         st.header("Timeline")
-        current_year = st.number_input("Current Year", value=2025)
-        start_year = st.number_input("Construction/Sales Start Year", value=2025)
+        current_year = st.number_input(
+            "Current Year", 
+            value=parse_int_with_preload("", None, 2025)
+        )
+        start_year = st.number_input(
+            "Construction/Sales Start Year", 
+            value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, 2025)
+        )
         
         # Separate construction and sales duration
-        construction_years = st.number_input("Number of Years for Construction", value=3, min_value=1)
-        sales_years = st.number_input("Number of Years for Sales", value=3, min_value=1)
+        construction_years = st.number_input(
+            "Number of Years for Construction", 
+            value=parse_int_with_preload("", preload_data.get('construction_years') if preload_data else None, 3), 
+            min_value=1
+        )
+        sales_years = st.number_input(
+            "Number of Years for Sales", 
+            value=parse_int_with_preload("", preload_data.get('sales_years') if preload_data else None, 3), 
+            min_value=1
+        )
         
-        start_booking_year = st.number_input("Revenue Booking Start Year", value=2027)
-        complete_year = st.number_input("Project Completion Year", value=2030)
+        start_booking_year = st.number_input(
+            "Revenue Booking Start Year", 
+            value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, 2027)
+        )
+        complete_year = st.number_input(
+            "Project Completion Year", 
+            value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, 2030)
+        )
         
         st.markdown("---")
-        sga_percent = st.number_input("SG&A as % of Revenue", min_value=0.0, max_value=1.0, value=0.08, step=0.01)
-        wacc_rate = st.number_input("WACC (Discount Rate, e.g. 0.12 for 12%)", min_value=0.0, max_value=1.0, value=0.12, step=0.01)
+        sga_percent = st.number_input(
+            "SG&A as % of Revenue", 
+            min_value=0.0, max_value=1.0, 
+            value=float(preload_data.get('sga_percentage', 0.08)) if preload_data else 0.08, 
+            step=0.01
+        )
+        wacc_rate = st.number_input(
+            "WACC (Discount Rate, e.g. 0.12 for 12%)", 
+            min_value=0.0, max_value=1.0, 
+            value=float(preload_data.get('wacc_rate', 0.12)) if preload_data else 0.12, 
+            step=0.01
+        )
+
+    # Add Save Project button
+    st.sidebar.markdown("---")
+    if st.sidebar.button("💾 Save Current Project", type="primary"):
+        # Collect current project data
+        current_project_data = {
+            'company_ticker': preload_data.get('company_ticker', 'MANUAL') if preload_data else 'MANUAL',
+            'company_name': preload_data.get('company_name', 'Manual Entry') if preload_data else 'Manual Entry',
+            'total_units': total_units,
+            'average_unit_size': average_unit_size,
+            'average_selling_price': asp,
+            'gross_floor_area': gfa,
+            'land_area': land_area,
+            'construction_cost_per_sqm': construction_cost_per_sqm,
+            'land_cost_per_sqm': land_cost_per_sqm,
+            'construction_start_year': start_year,
+            'sale_start_year': start_year,  # Assuming same as construction start
+            'construction_years': construction_years,
+            'sales_years': sales_years,
+            'revenue_booking_start_year': start_booking_year,
+            'project_completion_year': complete_year,
+            'sga_percentage': sga_percent,
+            'wacc_rate': wacc_rate
+        }
+        
+        save_result = save_project_data(current_project_data, project_name)
+        if save_result["success"]:
+            st.sidebar.success(save_result["message"])
+            if save_result["action"] == "saved":
+                st.sidebar.info("💡 Project added to database. Refresh dashboard to see updates.")
+        else:
+            st.sidebar.error(save_result["message"])
+
+    # Clear preload data after first use
+    if preload_data:
+        if 'clear_preload' not in st.session_state:
+            st.session_state['clear_preload'] = True
+        else:
+            if st.session_state['clear_preload']:
+                st.session_state.pop('preload_project_data', None)
+                st.session_state.pop('preload_project_name', None)
+                st.session_state['clear_preload'] = False
 
     # Calculate totals
     total_revenue = nsa * asp
