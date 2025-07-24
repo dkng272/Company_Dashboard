@@ -615,7 +615,7 @@ def format_number_with_commas(value: str) -> str:
     except (ValueError, TypeError):
         return str(value)
 
-def get_project_basic_info_perplexity(project_name: str, api_key: str, model: str = "sonar"):
+def get_project_basic_info_perplexity(project_name: str, api_key: str, model: str = "sonar-pro"):
     """
     Query Perplexity API for basic real estate project info using the project name.
     
