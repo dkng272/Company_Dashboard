@@ -1633,8 +1633,6 @@ def main():
                     st.rerun()
             else:
                 st.sidebar.error(save_result["message"])
-        else:
-            st.sidebar.info("💾 Save functionality not available (database connection required)")
 
     # Clear preload data after first use (but not for database selections)
     if preload_data and not selected_project_data:
