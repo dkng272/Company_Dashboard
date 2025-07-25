@@ -17,6 +17,13 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+# Import utility functions
+from utils.utils import (
+    get_project_root,
+    get_data_path,
+    format_vnd_billions,
+    format_number_with_commas
+)
 
 # Import Perplexity utilities
 from utils.perplexity_utils import get_project_basic_info_perplexity, parse_perplexity_response
@@ -69,71 +76,6 @@ st.set_page_config(
     page_icon="🧮",
     layout="wide"
 )
-
-
-# Read API key from environment
-perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
-
-if not perplexity_api_key:
-    st.warning(
-        "⚠️ PERPLEXITY_API_KEY environment variable is not set.\n\n"
-        "**For local development:**\n"
-        "1. Create a file named `.env` in your project root directory\n"
-        "2. Add this line: `PERPLEXITY_API_KEY=your_perplexity_api_key_here`\n\n"
-        "**For Streamlit Cloud deployment:**\n"
-        "1. Go to your app settings in Streamlit Cloud\n"
-        "2. Add PERPLEXITY_API_KEY as a secret in the 'Secrets' section\n\n"
-        "⚡ You can still use the calculator without Perplexity integration!"
-    )
-    perplexity_api_key = None  # Allow app to continue without API key
-
-
-
-def format_vnd_billions(value: float) -> str:
-    """Format a VND value into billions with proper formatting."""
-    if value == 0:
-        return "0 VND"
-    
-    # Convert to billions
-    billions = value / 1_000_000_000
-    
-    # Format with appropriate decimal places
-    if abs(billions) >= 1000:
-        return f"{billions:,.0f} billion VND"
-    elif abs(billions) >= 100:
-        return f"{billions:,.1f} billion VND"
-    elif abs(billions) >= 10:
-        return f"{billions:,.1f} billion VND"
-    elif abs(billions) >= 1:
-        return f"{billions:,.2f} billion VND"
-    else:
-        # For less than 1 billion, show in millions
-        millions = value / 1_000_000
-        if abs(millions) >= 1:
-            return f"{millions:,.0f} million VND"
-        else:
-            # For very small amounts, show in thousands or raw
-            if abs(value) >= 1_000:
-                thousands = value / 1_000
-                return f"{thousands:,.0f} thousand VND"
-            else:
-                return f"{value:,.0f} VND"
-
-def format_number_with_commas(value: str) -> str:
-    """Format a numeric string with commas for better readability."""
-    if not value or value == "":
-        return "none"
-    
-    try:
-        # Convert to float first to handle any decimal points
-        num = float(str(value).replace(",", ""))
-        # Format with commas
-        if num == int(num):
-            return f"{int(num):,}"
-        else:
-            return f"{num:,.2f}"
-    except (ValueError, TypeError):
-        return str(value)
 
 def main():
     st.title("🧮 Real Estate RNAV Calculator - MongoDB Direct Edition")
