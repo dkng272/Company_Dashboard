@@ -442,7 +442,7 @@ def main():
         
         # Add Location input field at the top
         location = st.text_input(
-            "📍 Project Location",
+            "Project Location",
             value=preload_data.get('location', '') if preload_data else '',
             placeholder="Enter project location (e.g., District 1, Ho Chi Minh City)",
             key="location"
@@ -451,9 +451,7 @@ def main():
             st.caption(f"📊 From database: **{preload_data['location']}**")
         else:
             st.caption("💡 Enter project location for better documentation")
-        
-        st.markdown("---")  # Add separator after location
-        
+               
         # Total Units
         total_units = st.number_input(
             "Total Units", 
@@ -831,12 +829,6 @@ def main():
     if not all(length == expected_length for length in schedules_info.values()):
         st.error(f"Schedule length mismatch! Expected: {expected_length}, Got: {schedules_info}")
         st.stop()
-
-    st.header(f"Project: {project_name}")
-    
-    # Show project location prominently
-    if location and location.strip():
-        st.info(f"📍 **Location:** {location}")
 
     df_rnav = RNAV_Calculation(
         selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
