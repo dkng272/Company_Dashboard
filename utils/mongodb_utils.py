@@ -1,196 +1,201 @@
-"""
-MongoDB utilities for RNAV Calculator
-Provides database operations for project data storage and retrieval
-"""
+#%%
 
+import streamlit as st
 import os
 import pandas as pd
-from datetime import datetime
+import certifi
+from pymongo import MongoClient
+import datetime
 from dotenv import load_dotenv
-import streamlit as st
 
-# Load environment variables
-load_dotenv()
 
-try:
-    from pymongo import MongoClient
-    from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
-    PYMONGO_AVAILABLE = True
-except ImportError:
-    PYMONGO_AVAILABLE = False
-    st.error("PyMongo not installed. Run: pip install pymongo")
-
-# MongoDB configuration
-MONGODB_URI = os.getenv("MONGODB_CONNECTION_STRING")
-DATABASE_NAME = os.getenv("MONGODB_DATABASE")
-COLLECTION_NAME = os.getenv("MONGODB_COLLECTION")
-
-def get_mongodb_client():
-    """Get MongoDB client connection"""
-    if not PYMONGO_AVAILABLE:
-        return None
-    
+@st.cache_resource
+def init_mongodb_connection():
+    """Initialize MongoDB connection"""
     try:
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-        # Test the connection
-        client.admin.command('ping')
-        return client
-    except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-        st.error(f"MongoDB connection failed: {str(e)}")
-        return None
-
-def test_mongodb_connection():
-    """Test MongoDB connection and return status"""
-    if not PYMONGO_AVAILABLE:
-        return {"success": False, "message": "PyMongo not installed"}
-    
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return {"success": False, "message": "Failed to create client"}
+        # Get MongoDB connection string from .env file
+        connection_string = os.getenv('MONGODB_CONNECTION_STRING')
+        
+        if not connection_string:
+            st.error("❌ MONGODB_CONNECTION_STRING not found in .env file. Please add it to your .env file.")
+            return None
+        
+        # Create MongoDB client with SSL certificate verification
+        client = MongoClient(connection_string, tlsCAFile=certifi.where())
         
         # Test connection
         client.admin.command('ping')
-        db = client[DATABASE_NAME]
-        collection = db[COLLECTION_NAME]
-        
-        # Count documents
-        count = collection.count_documents({})
-        client.close()
-        
-        return {
-            "success": True, 
-            "message": f"Connected to {DATABASE_NAME}.{COLLECTION_NAME} ({count} projects)"
-        }
+        return client
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        st.error(f"❌ Error connecting to MongoDB: {str(e)}")
+        return None
 
-def get_companies_from_database():
-    """Get list of unique companies from MongoDB"""
-    if not PYMONGO_AVAILABLE:
-        return []
-    
+def load_companies_data():
+    """Load companies from MongoDB Companies collection"""
     try:
-        client = get_mongodb_client()
+        client = init_mongodb_connection()
         if client is None:
-            return []
+            return pd.DataFrame()
         
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
+        # Get database and collection names
         db_name = 'VietnamStocks'
         collection_name = 'Companies'
         
-        db = client[db_name]
-        collection = db[collection_name]
+        # Get database and collection
+        db = client.get_database(db_name)
+        collection = db.get_collection(collection_name)
         
-        # Get all companies
+        # Query all companies
         companies_cursor = collection.find({})
         companies_list = list(companies_cursor)
-        client.close()
         
-        # Format as "TICKER - Company Name"
-        formatted_companies = []
-        for company in companies_list:
-            ticker = company.get("ticker", "")
-            name = company.get("company_name", "")
-            if ticker and name:
-                formatted_companies.append(f"{ticker} - {name}")
+        if not companies_list:
+            st.write(f"🔍 DEBUG: No companies found in MongoDB database '{db_name}', collection '{collection_name}'.")
+            return pd.DataFrame()
         
-        return sorted(formatted_companies)
+        # Convert to DataFrame
+        df = pd.DataFrame(companies_list)
+        
+        # Remove MongoDB ObjectId if present
+        if '_id' in df.columns:
+            df = df.drop('_id', axis=1)
+        
+        st.write(f"🔍 DEBUG: Loaded {len(df)} companies from MongoDB")
+        return df
         
     except Exception as e:
-        st.error(f"Error getting companies: {str(e)}")
+        st.error(f"❌ Error loading companies data from MongoDB: {str(e)}")
+        return pd.DataFrame()
+
+def load_projects_data():
+    """Load real estate projects from MongoDB database"""
+    try:
+        client = init_mongodb_connection()
+        if client is None:
+            return pd.DataFrame()
+        
+        # Get database and collection names - using VietnamStocks database
+        db_name = 'VietnamStocks'
+        collection_name = 'RealEstateProjects'
+        
+        # Get database and collection
+        db = client.get_database(db_name)
+        collection = db.get_collection(collection_name)
+        
+        # Query all projects
+        projects_cursor = collection.find({})
+        projects_list = list(projects_cursor)
+        
+        if not projects_list:
+            st.write(f"🔍 DEBUG: No projects found in MongoDB database '{db_name}', collection '{collection_name}'.")
+            return pd.DataFrame()
+        
+        # Convert to DataFrame
+        df_projects = pd.DataFrame(projects_list)
+        
+        # Remove MongoDB ObjectId if present
+        if '_id' in df_projects.columns:
+            df_projects = df_projects.drop('_id', axis=1)
+        
+        st.write(f"🔍 DEBUG: Loaded {len(df_projects)} projects from MongoDB")
+        st.write(f"🔍 DEBUG: Project columns: {list(df_projects.columns)}")
+        
+        # Load companies data and merge
+        df_companies = load_companies_data()
+        if not df_companies.empty:
+            # Merge projects with company information on company_ticker
+            df_merged = df_projects.merge(
+                df_companies[['ticker', 'company_name', 'sector']], 
+                left_on='company_ticker', 
+                right_on='ticker', 
+                how='left'
+            )
+            # Drop the duplicate ticker column
+            if 'ticker' in df_merged.columns:
+                df_merged = df_merged.drop('ticker', axis=1)
+            
+            # Handle date conversion for last_updated if it exists
+            if 'last_updated' in df_merged.columns:
+                df_merged['last_updated'] = pd.to_datetime(df_merged['last_updated'], errors='coerce')
+            
+            st.write(f"🔍 DEBUG: Merged dataframe shape: {df_merged.shape}")
+            return df_merged
+        else:
+            # Handle date conversion for last_updated if it exists
+            if 'last_updated' in df_projects.columns:
+                df_projects['last_updated'] = pd.to_datetime(df_projects['last_updated'], errors='coerce')
+            return df_projects
+        
+    except Exception as e:
+        st.error(f"❌ Error loading projects data from MongoDB: {str(e)}")
+        return pd.DataFrame()
+
+def get_companies_list():
+    """Get formatted list of companies for selectbox"""
+    df_companies = load_companies_data()
+    if df_companies.empty:
         return []
+    
+    # Format as "TICKER - Company Name"
+    companies_list = []
+    for _, row in df_companies.iterrows():
+        ticker = row.get('ticker', '')
+        name = row.get('company_name', '')
+        if ticker and name:
+            companies_list.append(f"{ticker} - {name}")
+    
+    return sorted(companies_list)
 
 def get_projects_for_company(company_ticker):
-    """Get list of projects for a specific company from MongoDB"""
-    if not PYMONGO_AVAILABLE:
+    """Get projects for a specific company"""
+    df_projects = load_projects_data()
+    if df_projects.empty:
         return []
     
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return []
-        
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
-        db_name = 'VietnamStocks'
-        collection_name = 'RealEstateProjects'
-        
-        db = client[db_name]
-        collection = db[collection_name]
-        
-        # Find projects for the company
-        projects = collection.find(
-            {"company_ticker": company_ticker},
-            {"project_name": 1, "_id": 0}
-        ).sort("project_name", 1)
-        
-        project_names = [project["project_name"] for project in projects]
-        client.close()
-        
-        return project_names
-        
-    except Exception as e:
-        st.error(f"Error getting projects for company: {str(e)}")
+    # Filter projects by company ticker
+    company_projects = df_projects[df_projects['company_ticker'] == company_ticker]
+    if company_projects.empty:
         return []
+    
+    return sorted(company_projects['project_name'].tolist())
 
-def get_project_data_from_database(company_ticker, project_name):
-    """Get specific project data from MongoDB"""
-    if not PYMONGO_AVAILABLE:
+def get_project_data(company_ticker, project_name):
+    """Get specific project data"""
+    df_projects = load_projects_data()
+    if df_projects.empty:
         return None
     
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return None
-        
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
-        db_name = 'VietnamStocks'
-        collection_name = 'RealEstateProjects'
-        
-        db = client[db_name]
-        collection = db[collection_name]
-        
-        # Find specific project
-        project = collection.find_one({
-            "company_ticker": company_ticker,
-            "project_name": project_name
-        })
-        
-        client.close()
-        
-        if project:
-            # Remove MongoDB ObjectId
-            project.pop('_id', None)
-            return project
-        else:
-            return None
-            
-    except Exception as e:
-        st.error(f"Error getting project data: {str(e)}")
+    # Find the specific project
+    project_data = df_projects[
+        (df_projects['company_ticker'] == company_ticker) & 
+        (df_projects['project_name'] == project_name)
+    ]
+    
+    if project_data.empty:
         return None
+    
+    return project_data.iloc[0].to_dict()
 
-def save_project_data(project_data, project_name, rnav_value=None):
+def save_project_to_mongodb(project_data, project_name, rnav_value=None):
     """Save project data to MongoDB"""
-    if not PYMONGO_AVAILABLE:
-        return {"success": False, "message": "PyMongo not available"}
-    
     try:
-        client = get_mongodb_client()
+        client = init_mongodb_connection()
         if client is None:
             return {"success": False, "message": "Failed to connect to MongoDB"}
         
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
+        # Get database and collection
         db_name = 'VietnamStocks'
         collection_name = 'RealEstateProjects'
         
-        db = client[db_name]
-        collection = db[collection_name]
+        db = client.get_database(db_name)
+        collection = db.get_collection(collection_name)
         
-        # Prepare document
+        # Prepare document including location
         document = {
             "project_name": project_name,
             "company_ticker": project_data.get('company_ticker', 'MANUAL'),
             "company_name": project_data.get('company_name', 'Manual Entry'),
+            "location": project_data.get('location', ''),  # Include location field
             "total_units": project_data.get('total_units', 0),
             "net_sellable_area": project_data.get('total_units', 0) * project_data.get('average_unit_size', 0),
             "average_unit_size": project_data.get('average_unit_size', 0),
@@ -209,8 +214,8 @@ def save_project_data(project_data, project_name, rnav_value=None):
             "sga_percentage": project_data.get('sga_percentage', 0.08),
             "wacc_rate": project_data.get('wacc_rate', 0.12),
             "rnav_value": rnav_value,
-            "last_updated": datetime.now(),
-            "created_date": datetime.now()
+            "last_updated": datetime.datetime.now(),
+            "created_date": datetime.datetime.now()
         }
         
         # Check if project exists
@@ -220,8 +225,11 @@ def save_project_data(project_data, project_name, rnav_value=None):
         })
         
         if existing:
-            # Update existing document but preserve created_date
-            document["created_date"] = existing.get("created_date", datetime.now())
+            # Update existing document but preserve created_date and location if not provided
+            document["created_date"] = existing.get("created_date", datetime.datetime.now())
+            # Preserve existing location if new one is empty
+            if not document["location"] and existing.get("location"):
+                document["location"] = existing["location"]
             result = collection.replace_one(
                 {"_id": existing["_id"]}, 
                 document
@@ -234,92 +242,9 @@ def save_project_data(project_data, project_name, rnav_value=None):
             action = "saved"
             message = f"✅ Project '{project_name}' saved successfully to MongoDB"
         
-        client.close()
         return {"success": True, "message": message, "action": action}
         
     except Exception as e:
         return {"success": False, "message": f"Error saving to MongoDB: {str(e)}"}
 
-def load_project_data(project_name):
-    """Load project data by name from MongoDB"""
-    if not PYMONGO_AVAILABLE:
-        return {"success": False, "message": "PyMongo not available"}
-    
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return {"success": False, "message": "Failed to connect to MongoDB"}
-        
-        db = client[DATABASE_NAME]
-        collection = db[COLLECTION_NAME]
-        
-        # Find project by name
-        project = collection.find_one({"project_name": project_name})
-        client.close()
-        
-        if project:
-            # Remove MongoDB ObjectId for JSON serialization
-            project.pop('_id', None)
-            return {"success": True, "data": project}
-        else:
-            return {"success": False, "message": f"Project '{project_name}' not found"}
-            
-    except Exception as e:
-        return {"success": False, "message": f"Error loading from MongoDB: {str(e)}"}
-
-def get_all_project_names():
-    """Get list of all project names from MongoDB"""
-    if not PYMONGO_AVAILABLE:
-        return []
-    
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return []
-        
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
-        db_name = 'VietnamStocks'
-        collection_name = 'RealEstateProjects'
-        
-        db = client[db_name]
-        collection = db[collection_name]
-        
-        # Get distinct project names
-        project_names = collection.distinct("project_name")
-        client.close()
-        
-        return sorted(project_names)
-        
-    except Exception as e:
-        st.error(f"Error getting project names: {str(e)}")
-        return []
-
-def load_projects_database():
-    """Load all projects as DataFrame from MongoDB"""
-    if not PYMONGO_AVAILABLE:
-        return pd.DataFrame()
-    
-    try:
-        client = get_mongodb_client()
-        if client is None:
-            return pd.DataFrame()
-        
-        # Use same database and collection as Real_Estate_Dashboard_MongoDB
-        db_name = 'VietnamStocks'
-        collection_name = 'RealEstateProjects'
-        
-        db = client[db_name]
-        collection = db[collection_name]
-        
-        # Get all projects
-        projects = list(collection.find({}, {"_id": 0}))  # Exclude _id field
-        client.close()
-        
-        if projects:
-            return pd.DataFrame(projects)
-        else:
-            return pd.DataFrame()
-            
-    except Exception as e:
-        st.error(f"Error loading projects database: {str(e)}")
-        return pd.DataFrame()
+# %%
