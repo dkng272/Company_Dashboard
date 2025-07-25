@@ -570,22 +570,34 @@ def main():
         current_year = current_calendar_year
         st.info(f"📅 **Current Year:** {current_year} (automatically set to calendar year)")
         
-        start_year = st.number_input(
-            "Construction/Sales Start Year", 
+        # Separate Construction Start Year and Sales Start Year
+        construction_start_year = st.number_input(
+            "Construction Start Year", 
             value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, current_year),
             min_value=current_year - 10,  # Allow up to 10 years in the past
             max_value=current_year + 20   # Allow up to 20 years in the future
         )
         
-        # Show warning if start year is in the past
-        if start_year < current_year:
-            years_ago = current_year - start_year
-            st.warning(f"⚠️ Start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
+        sales_start_year = st.number_input(
+            "Sales Start Year", 
+            value=parse_int_with_preload("", preload_data.get('sale_start_year') if preload_data else None, current_year),
+            min_value=current_year - 10,  # Allow up to 10 years in the past
+            max_value=current_year + 20   # Allow up to 20 years in the future
+        )
+        
+        # Show warning if either start year is in the past
+        if construction_start_year < current_year:
+            years_ago = current_year - construction_start_year
+            st.warning(f"⚠️ Construction start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
+        
+        if sales_start_year < current_year:
+            years_ago = current_year - sales_start_year
+            st.warning(f"⚠️ Sales start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
         
         # Add land payment year input
         land_payment_year = st.number_input(
             "Land Payment Year", 
-            value=parse_int_with_preload("", preload_data.get('land_payment_year') if preload_data else None, start_year),
+            value=parse_int_with_preload("", preload_data.get('land_payment_year') if preload_data else None, construction_start_year),
             min_value=current_year - 10,  # Allow up to 10 years in the past
             max_value=current_year + 20   # Allow up to 20 years in the future
         )
@@ -604,13 +616,13 @@ def main():
         
         start_booking_year = st.number_input(
             "Revenue Booking Start Year", 
-            value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, max(current_year, start_year + 1)),
-            min_value=start_year
+            value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, max(current_year, sales_start_year + 1)),
+            min_value=sales_start_year
         )
         complete_year = st.number_input(
             "Project Completion Year", 
-            value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, start_year + 5),
-            min_value=start_year + 1
+            value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, max(construction_start_year, sales_start_year) + 5),
+            min_value=max(construction_start_year, sales_start_year) + 1
         )
         
         # Show timeline summary
@@ -618,12 +630,12 @@ def main():
         st.markdown("**📊 Project Timeline Summary:**")
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"• Construction: {start_year} - {start_year + construction_years - 1}")
-            st.write(f"• Sales: {start_year} - {start_year + sales_years - 1}")
+            st.write(f"• Construction: {construction_start_year} - {construction_start_year + construction_years - 1}")
+            st.write(f"• Sales: {sales_start_year} - {sales_start_year + sales_years - 1}")
             st.write(f"• Land Payment: {land_payment_year}")
         with col2:
             st.write(f"• Revenue Booking: {start_booking_year} - {complete_year}")
-            st.write(f"• Project Duration: {complete_year - start_year + 1} years")
+            st.write(f"• Project Duration: {complete_year - min(construction_start_year, sales_start_year) + 1} years")
         
         st.markdown("---")
         sga_percent = st.number_input(
@@ -653,13 +665,13 @@ def main():
 
                 # Generate schedules
                 selling_progress = selling_progress_schedule(
-                    total_revenue/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+                    total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
                 )
                 sga_payment = sga_payment_schedule(
-                    total_sga_cost/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+                    total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
                 )
                 construction_payment = construction_payment_schedule(
-                    total_construction_cost/(10**9), int(current_year), int(start_year), int(construction_years), int(complete_year)
+                    total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
                 )
                 land_use_right_payment = land_use_right_payment_schedule_single_year(
                     total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
@@ -723,8 +735,8 @@ def main():
                 'land_area': land_area,
                 'construction_cost_per_sqm': construction_cost_per_sqm,
                 'land_cost_per_sqm': land_cost_per_sqm,
-                'construction_start_year': start_year,
-                'sale_start_year': start_year,
+                'construction_start_year': construction_start_year,
+                'sale_start_year': sales_start_year,
                 'land_payment_year': land_payment_year,
                 'construction_years': construction_years,
                 'sales_years': sales_years,
@@ -765,16 +777,13 @@ def main():
 
     # Update schedule calculations to use separate construction and sales years
     selling_progress = selling_progress_schedule(
-        total_revenue/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+        total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
     )
     sga_payment = sga_payment_schedule(
-        total_sga_cost/(10**9), int(current_year), int(start_year), int(sales_years), int(complete_year)
+        total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
     )
     construction_payment = construction_payment_schedule(
-        total_construction_cost/(10**9), int(current_year), int(start_year), int(construction_years), int(complete_year)
-    )
-    land_use_right_payment = land_use_right_payment_schedule_single_year(
-        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+        total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
     )
 
     df_pnl = generate_pnl_schedule(
@@ -868,8 +877,8 @@ def main():
         
         st.caption(f"📅 Last stored: {last_updated}")
     
-    if start_year < current_year:
-        st.info(f"💡 **Note:** Project started {current_year - start_year} years ago. RNAV calculation excludes historical cash flows and only considers future value from {current_year} onwards.")
+    if min(construction_start_year, sales_start_year) < current_year:
+        st.info(f"💡 **Note:** Project started {current_year - min(construction_start_year, sales_start_year)} years ago. RNAV calculation excludes historical cash flows and only considers future value from {current_year} onwards.")
 
     st.header("Cash Flow Chart")
     # Filter out the "Total" row and create chart with years on x-axis
