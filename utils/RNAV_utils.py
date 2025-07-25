@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import requests
 import re
+import numpy as np
 
 def selling_progress_schedule(
     total_revenue: float,
