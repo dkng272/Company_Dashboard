@@ -760,18 +760,22 @@ def main():
     st.markdown("---")
     st.markdown("**📊 Project Timeline Summary:**")
     
-    
-    st.write(f"**Construction:** {construction_start_year} - {construction_start_year + construction_years - 1}")
-    st.write(f"**Sales:** {sales_start_year} - {sales_start_year + sales_years - 1}")
-    st.write(f"**Land Payment:** {land_payment_year}")
-    st.write(f"**Revenue Booking:** {start_booking_year} - {complete_year}")
-    st.write(f"**Project Duration:** {complete_year - min(construction_start_year, sales_start_year) + 1} years")
-    st.write(f"**Total Revenue:** {format_vnd_billions(total_revenue)}")
-    st.write(f"**Total Construction Cost:** {format_vnd_billions(total_construction_cost)}")
-    st.write(f"**Total Land Cost:** {format_vnd_billions(total_land_cost)}")
-    st.write(f"**Total SG&A:** {format_vnd_billions(total_sga_cost)}")
-    st.write(f"**Total Estimated PBT:** {format_vnd_billions(total_estimated_PBT)}")
-    st.write(f"**Total Estimated PAT:** {format_vnd_billions(total_estimated_PAT)}")
+    # Create two parallel columns for Project Parameters and Timeline
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(f"**Construction:** {construction_start_year} - {construction_start_year + construction_years - 1}")
+        st.write(f"**Sales:** {sales_start_year} - {sales_start_year + sales_years - 1}")
+        st.write(f"**Land Payment:** {land_payment_year}")
+        st.write(f"**Revenue Booking:** {start_booking_year} - {complete_year}")
+        st.write(f"**Project Duration:** {complete_year - min(construction_start_year, sales_start_year) + 1} years")
+    with col2:
+        st.write(f"**Total Revenue:** {format_vnd_billions(total_revenue)}")
+        st.write(f"**Total Construction Cost:** {format_vnd_billions(total_construction_cost)}")
+        st.write(f"**Total Land Cost:** {format_vnd_billions(total_land_cost)}")
+        st.write(f"**Total SG&A:** {format_vnd_billions(total_sga_cost)}")
+        st.write(f"**Total Estimated PBT:** {format_vnd_billions(total_estimated_PBT)}")    
+        st.write(f"**Total Estimated PAT:** {format_vnd_billions(total_estimated_PAT)}")
 
     
     # Update schedule calculations to use separate construction and sales years
