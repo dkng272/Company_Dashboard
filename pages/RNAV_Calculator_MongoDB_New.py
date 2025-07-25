@@ -165,7 +165,7 @@ def main():
         
         # Test companies loading
         #st.write("🔍 DEBUG: Loading companies...")
-        #companies = get_companies_list()
+        companies = get_companies_list()
         #st.write(f"🔍 DEBUG: Companies loaded: {len(companies)} companies")
         #st.write(f"🔍 DEBUG: Sample companies: {companies[:3] if companies else 'No companies found'}")
     else:
