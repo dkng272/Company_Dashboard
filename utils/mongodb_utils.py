@@ -50,7 +50,7 @@ def load_companies_data():
         companies_list = list(companies_cursor)
         
         if not companies_list:
-            st.write(f"🔍 DEBUG: No companies found in MongoDB database '{db_name}', collection '{collection_name}'.")
+            #st.write(f"🔍 DEBUG: No companies found in MongoDB database '{db_name}', collection '{collection_name}'.")
             return pd.DataFrame()
         
         # Convert to DataFrame
@@ -60,7 +60,7 @@ def load_companies_data():
         if '_id' in df.columns:
             df = df.drop('_id', axis=1)
         
-        st.write(f"🔍 DEBUG: Loaded {len(df)} companies from MongoDB")
+        #st.write(f"🔍 DEBUG: Loaded {len(df)} companies from MongoDB")
         return df
         
     except Exception as e:
@@ -87,7 +87,7 @@ def load_projects_data():
         projects_list = list(projects_cursor)
         
         if not projects_list:
-            st.write(f"🔍 DEBUG: No projects found in MongoDB database '{db_name}', collection '{collection_name}'.")
+            #st.write(f"🔍 DEBUG: No projects found in MongoDB database '{db_name}', collection '{collection_name}'.")
             return pd.DataFrame()
         
         # Convert to DataFrame
@@ -97,8 +97,8 @@ def load_projects_data():
         if '_id' in df_projects.columns:
             df_projects = df_projects.drop('_id', axis=1)
         
-        st.write(f"🔍 DEBUG: Loaded {len(df_projects)} projects from MongoDB")
-        st.write(f"🔍 DEBUG: Project columns: {list(df_projects.columns)}")
+        #st.write(f"🔍 DEBUG: Loaded {len(df_projects)} projects from MongoDB")
+        #st.write(f"🔍 DEBUG: Project columns: {list(df_projects.columns)}")
         
         # Load companies data and merge
         df_companies = load_companies_data()
@@ -118,7 +118,7 @@ def load_projects_data():
             if 'last_updated' in df_merged.columns:
                 df_merged['last_updated'] = pd.to_datetime(df_merged['last_updated'], errors='coerce')
             
-            st.write(f"🔍 DEBUG: Merged dataframe shape: {df_merged.shape}")
+            #st.write(f"🔍 DEBUG: Merged dataframe shape: {df_merged.shape}")
             return df_merged
         else:
             # Handle date conversion for last_updated if it exists
