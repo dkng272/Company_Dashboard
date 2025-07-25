@@ -1,10 +1,7 @@
-"""
-Perplexity AI utilities for real estate project information extraction
-Provides functions to query Perplexity API for project data
-"""
-
+from dotenv import load_dotenv
 import requests
 import re
+
 
 def get_project_basic_info_perplexity(project_name: str, api_key: str, model: str = "sonar-pro"):
     """
@@ -223,6 +220,7 @@ Please provide all requested information with your best professional estimates w
                 print(f"  {key}: {value}")
         
         return error_details
+
 
 def parse_perplexity_response(response_text):
     """

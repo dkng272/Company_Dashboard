@@ -1,3 +1,4 @@
+#%%
 import pandas as pd
 import streamlit as st
 import numpy as np
@@ -9,6 +10,26 @@ import requests
 import sys
 from pymongo import MongoClient
 import certifi
+
+# Add the parent directory to sys.path to import from utils
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+
+# Import Perplexity utilities
+from utils.perplexity_utils import get_project_basic_info_perplexity, parse_perplexity_response
+
+#Import RNAV utilities
+from utils.RNAV_utils import (
+    selling_progress_schedule,
+    land_use_right_payment_schedule_single_year,
+    construction_payment_schedule,
+    sga_payment_schedule,
+    generate_pnl_schedule
+)
+
 
 # Load environment variables
 load_dotenv()
@@ -30,324 +51,6 @@ if not perplexity_api_key:
     perplexity_api_key = None  # Allow app to continue without API key
 
 
-def get_project_basic_info_perplexity(project_name: str, api_key: str, model: str = "sonar-pro"):
-    """
-    Query Perplexity API for basic real estate project info using the project name.
-    
-    Args:
-        project_name (str): Name of the real estate project.
-        api_key (str): Your Perplexity API key.
-        model (str): The model to use. Default is "sonar-pro".
-    
-    Returns:
-        dict: Parsed JSON response from Perplexity API with the info or error details.
-    """
-    if not api_key:
-        raise ValueError("API key must be provided.")
-    if not project_name:
-        raise ValueError("Project name must be provided.")
-
-    url = "https://api.perplexity.ai/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    # Enhanced system prompt for Vietnamese real estate analysis
-    system_prompt = (
-        "You are a Vietnamese real estate market expert with extensive knowledge of property development projects, "
-        "pricing structures, and market conditions across Vietnam's major cities. You have access to current market data "
-        "and can make intelligent estimates based on location, project type, and comparable developments in the area."
-    )
-    
-    # Comprehensive user message with detailed instructions
-    user_message = f"""Please analyze the Vietnamese real estate project named '{project_name}' and provide comprehensive information.
-
-**SEARCH STRATEGY:**
-1. First, search for direct information about '{project_name}'
-2. If exact data is not available, analyze similar projects in the same area/district
-3. Use comparable projects from the same developer if available
-4. Apply Vietnamese real estate market standards and regional pricing patterns
-
-**REQUIRED INFORMATION TO EXTRACT/ESTIMATE:**
-
-**1. PROJECT BASIC INFO:**
-- Full project name and alternative names
-- Developer/owner company
-- Exact location (district, city, address if available)
-- Project type (apartment, villa, mixed-use, etc.)
-- Current status (planning, under construction, completed, selling)
-- Launch year and completion timeline
-
-**2. PROJECT SCALE & SPECIFICATIONS:**
-- Total number of units (apartments, villas, townhouses)
-- Average unit size in m² (break down by unit type if mixed)
-- Net Sellable Area (NSA) in m² total
-- Gross Floor Area (GFA) in m² total
-- Land area in m² (site area)
-- Number of buildings/blocks/phases
-
-**3. PRICING INFORMATION:**
-- Current average selling price per m² (VND/m²)
-- Price range if available (min-max per m²)
-- Recent pricing trends or changes
-- Price per unit (if available, specify unit type and size)
-
-**4. CONSTRUCTION & DEVELOPMENT COSTS:**
-- Estimated construction cost per m² (based on project type and location)
-- Land cost per m² (based on area land values)
-- Development timeline and phases
-
-**ESTIMATION GUIDELINES WHEN EXACT DATA IS NOT AVAILABLE:**
-
-**For TOTAL UNITS:** 
-- High-rise apartments: 20-40 units per floor, 20-50 floors typical
-- Mid-rise apartments: 4-8 units per floor, 5-15 floors typical  
-- Villa/townhouse projects: Based on land area ÷ typical plot size (150-300m² per unit)
-- Mixed-use: Estimate based on GFA and typical unit sizes
-
-**For AVERAGE UNIT SIZE:**
-- Ho Chi Minh City apartments: 60-120m² (luxury: 80-150m²)
-- Hanoi apartments: 65-110m² (luxury: 90-140m²)
-- Secondary cities: 70-130m² (more spacious)
-- Villas/townhouses: 150-400m² (premium: 200-500m²)
-
-**For SELLING PRICE PER M²:**
-- Research recent transactions in the same district/area
-- Consider project positioning (affordable, mid-range, luxury, ultra-luxury)
-- Account for location premiums (central vs suburban)
-- Use comparable projects' pricing as baseline
-
-**For GROSS FLOOR AREA (GFA):**
-- Calculate: Total units × Average unit size × Efficiency factor (1.3-1.5 for apartments, 1.1-1.3 for villas)
-- Include common areas, corridors, amenities, parking
-
-**For LAND AREA:**
-- Urban apartments: GFA/Land ratio typically 3-8 (higher in central areas)
-- Suburban/villa projects: GFA/Land ratio typically 0.3-1.5
-- Check local zoning regulations and typical plot ratios
-
-**For CONSTRUCTION COST PER M²:**
-- Basic apartments: 15-25 million VND/m²
-- Mid-range apartments: 20-35 million VND/m²  
-- Luxury apartments: 30-50 million VND/m²
-- Ultra-luxury/premium: 45-80+ million VND/m²
-- Villas: 25-60 million VND/m² (depending on finishes)
-
-**For LAND COST PER M²:**
-- Research recent land auction prices in the area
-- Use government published land price frameworks
-- Consider location premiums and development rights
-
-**RESPONSE FORMAT (PROVIDE EXACT NUMBERS ONLY):**
-
-Info: [Detailed project description including developer, location, type, status, and any relevant background information]
-
-Total Units: [NUMBER ONLY - no commas or text]
-Average Unit Size: [NUMBER ONLY - in m²] 
-Average Selling Price: [NUMBER ONLY - VND per m²]
-Gross Floor Area: [NUMBER ONLY - total m²]
-Construction Cost per sqm: [NUMBER ONLY - VND per m² for construction]
-Land Area: [NUMBER ONLY - total land area in m²]
-Land Cost per sqm: [NUMBER ONLY - VND per m² for land]
-
-Sources: [List your sources - web results, comparable projects, or "Market analysis based on area comps"]
-Confidence: [High/Medium/Low - based on data availability]
-
-Analysis Method: [Explain how you derived each number - "Found exact data" OR "Estimated based on [comparable projects/area standards/project type]"]
-
-Unit Size Analysis: [Explain your unit size calculation: mix of unit types, size distribution, etc.]
-
-Pricing Analysis: [Explain your pricing calculation: recent comps, location factors, premium/discount factors]
-
-Construction Cost Analysis: [Explain cost estimates: project type, quality level, location factors]
-
-Land Cost Analysis: [Explain land cost estimates: area benchmarks, zoning, development intensity]
-
-**IMPORTANT REQUIREMENTS:**
-- Always provide numerical estimates even if exact data is not available
-- Clearly distinguish between confirmed data and estimates
-- Use 2024-2025 Vietnamese market conditions
-- Consider inflation and recent market trends
-- Be specific about your estimation methodology
-- For mixed-use projects, provide weighted averages
-- Account for project phasing if applicable
-
-**LOCATION-SPECIFIC CONSIDERATIONS:**
-- Ho Chi Minh City: Higher density, premium pricing in central districts
-- Hanoi: Government influence, established vs new urban areas  
-- Da Nang: Resort/tourism factors, beachfront premiums
-- Secondary cities: Lower costs, larger units, emerging markets
-
-Please provide all requested information with your best professional estimates where exact data is not available."""
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ],
-        "max_tokens": 2000,  # Increased for comprehensive response
-        "temperature": 0.2,
-        "top_p": 0.9,
-        "stream": False
-    }
-
-    # Debug: Log the request payload
-    print(f"🔍 DEBUG: Sending request to Perplexity API")
-    print(f"URL: {url}")
-    print(f"Headers: {headers}")
-    print(f"Payload: {payload}")
-
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        
-        # Debug: Log response status
-        print(f"🔍 DEBUG: Response status code: {response.status_code}")
-        print(f"🔍 DEBUG: Response headers: {dict(response.headers)}")
-        
-        response.raise_for_status()
-        data = response.json()
-
-        # Debug: Log successful response structure
-        print(f"🔍 DEBUG: Successful response keys: {data.keys() if isinstance(data, dict) else 'Not a dict'}")
-
-        # The response usually contains choices with message content
-        if "choices" in data and len(data["choices"]) > 0:
-            return data["choices"][0]["message"]["content"]
-        else:
-            return {"error": "Unexpected API response format", "response": data}
-
-    except requests.exceptions.RequestException as e:
-        # Enhanced error handling to show more details
-        error_details = {
-            "error": f"Perplexity API request failed: {str(e)}",
-            "status_code": getattr(e.response, 'status_code', None),
-            "request_url": url,
-            "request_payload": payload,  # Include the payload that was sent
-            "request_headers": {k: v for k, v in headers.items() if k != "Authorization"}  # Exclude API key
-        }
-        
-        # Try to get response text for more details
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_details["response_text"] = e.response.text
-                error_details["response_headers"] = dict(e.response.headers)
-                
-                # Try to parse JSON error response
-                if e.response.headers.get('content-type', '').startswith('application/json'):
-                    error_details["response_json"] = e.response.json()
-            except Exception as parse_error:
-                error_details["parse_error"] = str(parse_error)
-        
-        # Debug: Print detailed error information
-        print(f"🚨 DEBUG: API Error Details:")
-        for key, value in error_details.items():
-            if key != "request_payload":  # Don't print payload twice
-                print(f"  {key}: {value}")
-        
-        return error_details
-
-# ...existing code...
-
-def parse_perplexity_response(response_text):
-    """
-    Parse Perplexity response to extract structured data fields.
-    
-    Args:
-        response_text (str): Raw response text from Perplexity
-        
-    Returns:
-        dict: Parsed data with extracted fields
-    """
-    if not response_text or not isinstance(response_text, str):
-        return {}
-    
-    # Enhanced regex patterns for extraction
-    patterns = {
-        "basic_info": [
-            r"Info:\s*(.*?)(?=Total Units:|Average Unit Size:|$)",
-            r"Project Info:\s*(.*?)(?=Total Units:|Average Unit Size:|$)",
-            r"Description:\s*(.*?)(?=Total Units:|Average Unit Size:|$)"
-        ],
-        "total_units": [
-            r"Total Units:\s*([0-9,\.]+)",
-            r"Number of Units:\s*([0-9,\.]+)",
-            r"Units:\s*([0-9,\.]+)"
-        ],
-        "average_unit_size": [
-            r"Average Unit Size:\s*([0-9,\.]+)",
-            r"Unit Size:\s*([0-9,\.]+)",
-            r"Average Size:\s*([0-9,\.]+)"
-        ],
-        "asp": [
-            r"Average Selling Price:\s*([0-9,\.]+)",
-            r"Selling Price:\s*([0-9,\.]+)",
-            r"Price per sqm:\s*([0-9,\.]+)",
-            r"ASP:\s*([0-9,\.]+)"
-        ],
-        "gfa": [
-            r"Gross Floor Area:\s*([0-9,\.]+)",
-            r"Floor Area:\s*([0-9,\.]+)",
-            r"GFA:\s*([0-9,\.]+)",
-            r"Total Floor Area:\s*([0-9,\.]+)"
-        ],
-        "construction_cost_per_sqm": [
-            r"Construction Cost per sqm:\s*([0-9,\.]+)",
-            r"Construction Cost:\s*([0-9,\.]+)",
-            r"Building Cost per sqm:\s*([0-9,\.]+)"
-        ],
-        "land_area": [
-            r"Land Area:\s*([0-9,\.]+)",
-            r"Site Area:\s*([0-9,\.]+)",
-            r"Plot Area:\s*([0-9,\.]+)"
-        ],
-        "land_cost_per_sqm": [
-            r"Land Cost per sqm:\s*([0-9,\.]+)",
-            r"Land Cost:\s*([0-9,\.]+)",
-            r"Land Price per sqm:\s*([0-9,\.]+)"
-        ],
-        "sources": [
-            r"Sources:\s*(.*?)(?=Confidence:|Analysis Method:|$)",
-            r"Source:\s*(.*?)(?=Confidence:|Analysis Method:|$)"
-        ],
-        "confidence": [
-            r"Confidence:\s*(.*?)(?=Analysis Method:|\n|$)",
-            r"Confidence Level:\s*(.*?)(?=Analysis Method:|\n|$)"
-        ],
-        "analysis_method": [
-            r"Analysis Method:\s*(.*?)(?=Unit Size Analysis:|\n|$)",
-            r"Method:\s*(.*?)(?=Unit Size Analysis:|\n|$)"
-        ]
-    }
-    
-    result = {}
-    
-    # Try multiple patterns for each field
-    for key, pattern_list in patterns.items():
-        found = False
-        for pattern in pattern_list:
-            m = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-            if m:
-                value = m.group(1).strip()
-                
-                # Clean up numeric values
-                if key not in ["basic_info", "sources", "confidence", "analysis_method"] and value:
-                    # Remove all non-numeric characters except dots
-                    cleaned_value = re.sub(r'[^\d\.]', '', value)
-                    # Handle multiple dots (keep only the first one)
-                    if cleaned_value.count('.') > 1:
-                        parts = cleaned_value.split('.')
-                        cleaned_value = parts[0] + '.' + ''.join(parts[1:])
-                    # Remove trailing dots
-                    cleaned_value = cleaned_value.rstrip('.')
-                    value = cleaned_value
-                
-                result[key] = value
-                found = True
-                break
-    
-    return result
 
 # Page configuration
 st.set_page_config(
@@ -610,318 +313,7 @@ if not perplexity_api_key:
     )
     perplexity_api_key = None  # Allow app to continue without API key
 
-# ...existing RNAV calculation functions...
-def selling_progress_schedule(
-    total_revenue: float,
-    current_year: int,
-    start_year: int,
-    num_years: int,
-    complete_year: int
-) -> list:
-    """
-    Distribute total revenue evenly over a given number of years (num_years),
-    starting from start_year. Output is aligned from current_year to complete_year.
-    Now allows start_year to be before current_year for historical tracking.
 
-    Args:
-        total_revenue (float): Total revenue
-        current_year (int): Start year of the output array
-        start_year (int): Year selling begins (can be < current_year)
-        num_years (int): Number of years selling takes
-        complete_year (int): Project completion year
-
-    Returns:
-        List[float]: Annual revenue array from current_year to complete_year
-    """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
-        raise ValueError("Selling period exceeds project completion year")
-
-    annual_revenue = total_revenue / num_years
-
-    # Build full year list from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
-
-    # Create array with revenue in the selling years only
-    revenue_by_year = [
-        annual_revenue if start_year <= year < start_year + num_years else 0.0
-        for year in full_years
-    ]
-
-    return revenue_by_year
-
-def land_use_right_payment_schedule_single_year(
-    total_payment: float,
-    current_year: int,
-    payment_year: int,
-    complete_year: int
-) -> list:
-    """
-    Generate land use right payment schedule from current_year to complete_year,
-    with the entire payment made in payment_year.
-    """
-    if payment_year > complete_year:
-        raise ValueError("payment_year must be earlier than complete_year")
-
-    num_years = complete_year - current_year + 1
-    payment_array = [0.0] * num_years
-
-    if payment_year < current_year:
-        # Payment year is before the current year, so no payment in the schedule
-        pass
-    else:
-        payment_index = payment_year - current_year
-        payment_array[payment_index] = total_payment
-
-    return payment_array
-
-def construction_payment_schedule(
-    total_cost: float,
-    current_year: int,
-    start_year: int,
-    num_years: int,
-    complete_year: int
-) -> list:
-    """
-    Distribute total construction cost evenly over num_years starting from start_year.
-    Output is aligned from current_year to complete_year.
-    Now allows start_year to be before current_year for historical tracking.
-    """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
-        raise ValueError("Construction period exceeds project completion year")
-
-    annual_cost = total_cost / num_years
-
-    # Create timeline from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
-
-    # Allocate cost to construction years
-    cost_by_year = [
-        annual_cost if start_year <= year < start_year + num_years else 0.0
-        for year in full_years
-    ]
-
-    return cost_by_year
-
-def sga_payment_schedule(
-    total_sga: float,
-    current_year: int,
-    start_year: int,
-    num_years: int,
-    complete_year: int
-) -> list:
-    """
-    Distribute total SG&A evenly over a given number of years (num_years),
-    starting from start_year. Output is aligned from current_year to complete_year.
-    Now allows start_year to be before current_year for historical tracking.
-    """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
-        raise ValueError("SG&A period exceeds project completion year")
-
-    annual_sga = total_sga / num_years
-
-    # Build full year list from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
-
-    # Create array with SG&A in the active years only
-    sga_by_year = [
-        annual_sga if start_year <= year < start_year + num_years else 0.0
-        for year in full_years
-    ]
-
-    return sga_by_year
-
-def generate_pnl_schedule(
-    total_revenue: float,
-    total_land_payment: float,
-    total_construction_payment: float,
-    total_sga: float,
-    current_year: int,
-    start_booking_year: int,
-    end_booking_year: int
-) -> pd.DataFrame:
-    """
-    Generate a simplified P&L schedule from start_booking_year to end_booking_year.
-    Shows both historical and future data with proper labeling.
-    """
-    if end_booking_year < start_booking_year:
-        raise ValueError("end_booking_year must be >= start_booking_year")
-
-    # Calculate annual amounts based on total booking period
-    total_booking_years = end_booking_year - start_booking_year + 1
-    revenue_annual = total_revenue / total_booking_years if total_booking_years > 0 else 0
-    land_payment_annual = total_land_payment / total_booking_years if total_booking_years > 0 else 0
-    sga_annual = total_sga / total_booking_years if total_booking_years > 0 else 0
-    construction_annual = total_construction_payment / total_booking_years if total_booking_years > 0 else 0
-
-    pnl_data = []
-    for year in range(start_booking_year, end_booking_year + 1):
-        # Determine if this is historical or future
-        is_historical = year < current_year
-        year_type = "Historical" if is_historical else "Future"
-        
-        # All years in the booking period have values
-        revenue = revenue_annual
-        land_cost = land_payment_annual
-        sga = sga_annual
-        construction = construction_annual
-        pbt = revenue + land_cost + sga + construction
-        tax = -pbt * 0.2 if pbt > 0 else 0.0
-        pat = pbt + tax
-
-        pnl_data.append({
-            "Year": year,
-            "Type": year_type,
-            "Revenue": revenue,
-            "Land Payment": land_cost,
-            "Construction": construction,
-            "SG&A": sga,
-            "Profit Before Tax": pbt,
-            "Tax Expense (20%)": tax,
-            "Profit After Tax": pat
-        })
-
-    df = pd.DataFrame(pnl_data)
-    
-    # Add total rows for historical, future, and overall
-    historical_df = df[df["Type"] == "Historical"]
-    future_df = df[df["Type"] == "Future"]
-    
-    # Add subtotals
-    if not historical_df.empty:
-        historical_total = {
-            "Year": "Total (Historical)",
-            "Type": "Summary",
-            "Revenue": historical_df["Revenue"].sum(),
-            "Land Payment": historical_df["Land Payment"].sum(),
-            "Construction": historical_df["Construction"].sum(),
-            "SG&A": historical_df["SG&A"].sum(),
-            "Profit Before Tax": historical_df["Profit Before Tax"].sum(),
-            "Tax Expense (20%)": historical_df["Tax Expense (20%)"].sum(),
-            "Profit After Tax": historical_df["Profit After Tax"].sum()
-        }
-        df = pd.concat([df, pd.DataFrame([historical_total])], ignore_index=True)
-    
-    if not future_df.empty:
-        future_total = {
-            "Year": "Total (Future)",
-            "Type": "Summary",
-            "Revenue": future_df["Revenue"].sum(),
-            "Land Payment": future_df["Land Payment"].sum(),
-            "Construction": future_df["Construction"].sum(),
-            "SG&A": future_df["SG&A"].sum(),
-            "Profit Before Tax": future_df["Profit Before Tax"].sum(),
-            "Tax Expense (20%)": future_df["Tax Expense (20%)"].sum(),
-            "Profit After Tax": future_df["Profit After Tax"].sum()
-        }
-        df = pd.concat([df, pd.DataFrame([future_total])], ignore_index=True)
-    
-    # Add overall total
-    overall_total = {
-        "Year": "Total (Overall)",
-        "Type": "Summary",
-        "Revenue": df[df["Type"] != "Summary"]["Revenue"].sum(),
-        "Land Payment": df[df["Type"] != "Summary"]["Land Payment"].sum(),
-        "Construction": df[df["Type"] != "Summary"]["Construction"].sum(),
-        "SG&A": df[df["Type"] != "Summary"]["SG&A"].sum(),
-        "Profit Before Tax": df[df["Type"] != "Summary"]["Profit Before Tax"].sum(),
-        "Tax Expense (20%)": df[df["Type"] != "Summary"]["Tax Expense (20%)"].sum(),
-        "Profit After Tax": df[df["Type"] != "Summary"]["Profit After Tax"].sum()
-    }
-    df = pd.concat([df, pd.DataFrame([overall_total])], ignore_index=True)
-
-    return df
-
-def RNAV_Calculation(
-    selling_progress_schedule: list,
-    construction_payment_schedule: list,
-    sga_payment_schedule: list,
-    tax_expense_schedule: list,
-    land_use_right_payment_schedule: list,
-    wacc: float,
-    current_year: int
-) -> pd.DataFrame:
-    """
-    Calculate RNAV using discounted cash flow method.
-    Only includes future cash flows (current year and beyond) for RNAV calculation.
-    """
-    n = len(selling_progress_schedule)
-    # Validate all input lists are of equal length
-    all_schedules = [
-        construction_payment_schedule,
-        sga_payment_schedule,
-        tax_expense_schedule,
-        land_use_right_payment_schedule
-    ]
-    if not all(len(lst) == n for lst in all_schedules):
-        raise ValueError("All input lists must be of equal length.")
-
-    data = []
-    total_rnav = 0.0
-    for i in range(n):
-        year = current_year + i
-        inflow = selling_progress_schedule[i]
-        
-        # Break down outflow components
-        construction_cost = construction_payment_schedule[i]
-        sga_cost = sga_payment_schedule[i]
-        tax_cost = tax_expense_schedule[i]
-        land_cost = land_use_right_payment_schedule[i]
-        
-        total_outflow = construction_cost + sga_cost + tax_cost + land_cost
-        net_cashflow = inflow + total_outflow
-        
-        # Calculate discount factor (year 0 = current year)
-        discount_factor = 1 / ((1 + wacc) ** i)
-        discounted_cashflow = net_cashflow * discount_factor
-        
-        # Only add to RNAV if it's current year or future (i >= 0)
-        total_rnav += discounted_cashflow
-
-        # Determine if this is a future cash flow for RNAV
-        included_in_rnav = True  # Since we start from current_year, all are included
-
-        data.append({
-            "Year": year,
-            "Year Index": i,
-            "Inflow (Revenue)": inflow,
-            "Construction Cost": construction_cost,
-            "Land Cost": land_cost,
-            "SG&A": sga_cost,
-            "Tax": tax_cost,
-            "Total Outflow": total_outflow,
-            "Net Cash Flow": net_cashflow,
-            "Discount Factor": discount_factor,
-            "Discounted Cash Flow": discounted_cashflow,
-            "Included in RNAV": "Yes" if included_in_rnav else "No"
-        })
-
-    df = pd.DataFrame(data)
-    
-    # Add total row
-    total_row = {
-        "Year": "Total RNAV",
-        "Year Index": np.nan,
-        "Inflow (Revenue)": df["Inflow (Revenue)"].sum(),
-        "Construction Cost": df["Construction Cost"].sum(),
-        "Land Cost": df["Land Cost"].sum(),
-        "SG&A": df["SG&A"].sum(),
-        "Tax": df["Tax"].sum(),
-        "Total Outflow": df["Total Outflow"].sum(),
-        "Net Cash Flow": df["Net Cash Flow"].sum(),
-        "Discount Factor": np.nan,
-        "Discounted Cash Flow": total_rnav,
-        "Included in RNAV": "Summary"
-    }
-    
-    df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
-    
-    return df
 
 def format_vnd_billions(value: float) -> str:
     """Format a VND value into billions with proper formatting."""
@@ -995,13 +387,13 @@ def main():
     if client:
         st.write("🔍 DEBUG: Loading projects database...")
         df_projects = load_projects_data()
-        st.write(f"🔍 DEBUG: Projects database shape: {df_projects.shape}")
+        #st.write(f"🔍 DEBUG: Projects database shape: {df_projects.shape}")
         
         # Test companies loading
-        st.write("🔍 DEBUG: Loading companies...")
-        companies = get_companies_list()
-        st.write(f"🔍 DEBUG: Companies loaded: {len(companies)} companies")
-        st.write(f"🔍 DEBUG: Sample companies: {companies[:3] if companies else 'No companies found'}")
+        #st.write("🔍 DEBUG: Loading companies...")
+        #companies = get_companies_list()
+        #st.write(f"🔍 DEBUG: Companies loaded: {len(companies)} companies")
+        #st.write(f"🔍 DEBUG: Sample companies: {companies[:3] if companies else 'No companies found'}")
     else:
         df_projects = pd.DataFrame()
         companies = []
@@ -1013,7 +405,7 @@ def main():
     if df_projects.empty:
         if client:
             st.warning("No projects found in MongoDB. You can still enter project details manually below.")
-            st.write("🔍 DEBUG: DataFrame is empty - check database connection and collection names")
+            #st.write("🔍 DEBUG: DataFrame is empty - check database connection and collection names")
         else:
             st.info("MongoDB not available. Enter project details manually below.")
         project_name = st.text_input("Project Name", value="My Project")
@@ -1086,7 +478,7 @@ def main():
                         with col4:
                             # Display Location information
                             location = selected_project_data.get('location', 'N/A')
-                            st.metric("📍 Location", location if location and location != 'N/A' else "Not specified")
+                            st.metric("Location", location if location and location != 'N/A' else "Not specified")
                             # Show RNAV if available
                             if 'rnav_value' in selected_project_data and selected_project_data['rnav_value']:
                                 rnav_formatted = format_vnd_billions(selected_project_data['rnav_value'])
@@ -1844,3 +1236,5 @@ if __name__ == "__main__":
 else:
     # For Streamlit, also call main when imported as a module
     main()
+
+# %%
