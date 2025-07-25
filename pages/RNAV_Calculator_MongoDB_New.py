@@ -101,7 +101,7 @@ def main():
 
     # Load projects database only if available
     if client:
-        st.write("🔍 DEBUG: Loading projects database...")
+        #st.write("🔍 DEBUG: Loading projects database...")
         df_projects = load_projects_data()
         #st.write(f"🔍 DEBUG: Projects database shape: {df_projects.shape}")
         
@@ -113,7 +113,7 @@ def main():
     else:
         df_projects = pd.DataFrame()
         companies = []
-        st.write("🔍 DEBUG: MongoDB not available, using empty DataFrame")
+        #st.write("🔍 DEBUG: MongoDB not available, using empty DataFrame")
     
     # Project selection interface
     st.header("📋 Project Selection")
@@ -201,20 +201,6 @@ def main():
                                 st.metric("🏆 Stored RNAV", rnav_formatted)
                             else:
                                 st.metric("🏆 RNAV Status", "Not calculated")
-                        
-                        # Show additional project details including location
-                        with st.expander("📋 Project Details", expanded=False):
-                            detail_col1, detail_col2 = st.columns(2)
-                            with detail_col1:
-                                st.write(f"**📍 Location:** {location}")
-                                st.write(f"**🏗️ Construction Start:** {selected_project_data.get('construction_start_year', 'N/A')}")
-                                st.write(f"**📅 Project Completion:** {selected_project_data.get('project_completion_year', 'N/A')}")
-                                st.write(f"**🔨 Construction Years:** {selected_project_data.get('construction_years', 'N/A')}")
-                            with detail_col2:
-                                st.write(f"**💰 Land Cost/m²:** {format_vnd_billions(selected_project_data.get('land_cost_per_sqm', 0))}")
-                                st.write(f"**🏗️ Construction Cost/m²:** {format_vnd_billions(selected_project_data.get('construction_cost_per_sqm', 0))}")
-                                st.write(f"**📊 SG&A %:** {selected_project_data.get('sga_percentage', 0.08):.1%}")
-                                st.write(f"**📈 WACC Rate:** {selected_project_data.get('wacc_rate', 0.12):.1%}")
                         
                         # Override preload_data with database data
                         preload_data = selected_project_data
