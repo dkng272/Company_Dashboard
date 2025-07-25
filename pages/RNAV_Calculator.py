@@ -50,6 +50,7 @@ except ImportError as e:
     def get_project_data_from_database(company_ticker, project_name):
         return None
 
+
 # Load .env file (for local development)
 load_dotenv()
 
