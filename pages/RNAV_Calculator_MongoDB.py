@@ -790,7 +790,12 @@ def main():
         total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
         int(current_year), int(start_booking_year), int(complete_year)
     )
-    
+
+    # Create land use right payment schedule
+    land_use_right_payment = land_use_right_payment_schedule_single_year(
+        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+    )
+
     # Create tax expense schedule that matches the time period from current_year to complete_year
     num_years = int(complete_year) - int(current_year) + 1
     
