@@ -706,31 +706,43 @@ def main():
             if not project_name or not project_name.strip():
                 st.sidebar.error("❌ Project name is required!")
             else:
-                # Calculate RNAV value before saving
+                # Use the selected company info (not from existing project data)
+                company_ticker = selected_company_ticker
+                company_name = selected_company_name
+                
+                # Calculate total revenue and PAT for storage
+                calculated_total_revenue = nsa * asp
+                calculated_total_construction_cost = gfa * construction_cost_per_sqm  # Positive value for storage
+                calculated_total_land_cost = land_area * land_cost_per_sqm  # Positive value for storage
+                calculated_total_sga_cost = calculated_total_revenue * sga_percent
+                calculated_total_PBT = calculated_total_revenue - calculated_total_land_cost - calculated_total_construction_cost - calculated_total_sga_cost
+                calculated_total_PAT = calculated_total_PBT * 0.8  # Assuming 20% tax rate
+                
+                # Calculate RNAV using the same logic as display section
                 try:
-                    # Calculate totals
-                    total_revenue = nsa * asp
-                    total_construction_cost = -gfa * construction_cost_per_sqm
-                    total_land_cost = -land_area * land_cost_per_sqm
-                    total_sga_cost = -total_revenue * sga_percent
+                    # Use the same totals calculation as the display section
+                    display_total_revenue = nsa * asp
+                    display_total_construction_cost = -gfa * construction_cost_per_sqm
+                    display_total_land_cost = -land_area * land_cost_per_sqm
+                    display_total_sga_cost = -display_total_revenue * sga_percent
 
-                    # Generate schedules
+                    # Generate schedules (same as display section)
                     selling_progress = selling_progress_schedule(
-                        total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                        display_total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
                     )
                     sga_payment = sga_payment_schedule(
-                        total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                        display_total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
                     )
                     construction_payment = construction_payment_schedule(
-                        total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
+                        display_total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
                     )
                     land_use_right_payment = land_use_right_payment_schedule_single_year(
-                        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+                        display_total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
                     )
 
                     df_pnl = generate_pnl_schedule(
-                        total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-                        int(current_year), int(start_booking_year), int(complete_year), total_construction_cost, construction_years, cost_of_debt
+                        display_total_revenue/(10**9), display_total_land_cost/(10**9), display_total_construction_cost/(10**9), display_total_sga_cost/(10**9),
+                        int(current_year), int(start_booking_year), int(complete_year), display_total_construction_cost/(10**9), construction_years, cost_of_debt
                     )
                     
                     # Create tax expense schedule
@@ -744,33 +756,48 @@ def main():
                             tax_value = 0.0
                         tax_expense.append(tax_value)
 
-                    # Calculate RNAV
+                    # Calculate RNAV (same as display section)
                     df_rnav = RNAV_Calculation(
                         selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
                     )
 
-                    # Get RNAV value
+                    # Get RNAV value (same logic as display section)
                     total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
                     if not total_row.empty:
                         rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
                     else:
+                        st.warning("⚠️ RNAV 'Total' row not found, using fallback method")
                         rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
+
+                    # Debug: Show RNAV calculation details
+                    st.sidebar.markdown("---")
+                    st.sidebar.subheader("🔍 Debug: RNAV Calculation")
+                    st.sidebar.write(f"**Discounted Cash Flow (Billions):** {rnav_value / (10**9):.4f}")
+                    st.sidebar.write(f"**RNAV Value to save:** {format_vnd_billions(rnav_value)}")
+                    st.sidebar.write(f"**Raw RNAV Value:** {rnav_value:,.0f} VND")
+                    
+                    if not total_row.empty:
+                        st.sidebar.success("✅ RNAV extracted from 'Total RNAV' row")
+                        st.sidebar.write(f"**DCF from total row:** {total_row['Discounted Cash Flow'].iloc[0]:.4f}")
+                    else:
+                        st.sidebar.warning("⚠️ Using fallback method for RNAV")
+                        st.sidebar.write(f"**Last row DCF:** {df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow']:.4f}")
 
                 except Exception as e:
                     st.sidebar.error(f"Error calculating RNAV: {str(e)}")
+                    st.sidebar.write("🔍 **Debug: RNAV Calculation Failed**")
+                    st.sidebar.write(f"Error details: {str(e)}")
                     rnav_value = None
                 
-                # Use the selected company info (not from existing project data)
-                company_ticker = selected_company_ticker
-                company_name = selected_company_name
-                
-                # Calculate total revenue and PAT for storage
-                calculated_total_revenue = nsa * asp
-                calculated_total_construction_cost = gfa * construction_cost_per_sqm  # Positive value for storage
-                calculated_total_land_cost = land_area * land_cost_per_sqm  # Positive value for storage
-                calculated_total_sga_cost = calculated_total_revenue * sga_percent
-                calculated_total_PBT = calculated_total_revenue - calculated_total_land_cost - calculated_total_construction_cost - calculated_total_sga_cost
-                calculated_total_PAT = calculated_total_PBT * 0.8  # Assuming 20% tax rate
+                # Debug: Show what will be saved
+                st.sidebar.markdown("---")
+                st.sidebar.subheader("🔍 Debug: Data to Save")
+                st.sidebar.write(f"**Project Name:** {project_name}")
+                st.sidebar.write(f"**Company:** {company_ticker} - {company_name}")
+                st.sidebar.write(f"**RNAV Value:** {format_vnd_billions(rnav_value) if rnav_value else 'None'}")
+                st.sidebar.write(f"**Total Revenue:** {format_vnd_billions(calculated_total_revenue)}")
+                st.sidebar.write(f"**Total PAT:** {format_vnd_billions(calculated_total_PAT)}")
+                st.sidebar.write(f"**Location:** {location if location else 'Not specified'}")
                 
                 # Collect current project data including location, total revenue, and total PAT
                 current_project_data = {
@@ -795,7 +822,7 @@ def main():
                     'wacc_rate': wacc_rate,
                     'cost_of_debt': cost_of_debt,
                     'total_revenue': calculated_total_revenue,  # Add total revenue
-                    'total_pat': calculated_total_PAT,  # Add total PAT
+                    'total_pat': calculated_total_PAT,  # Add total PAT for reference
                     'total_pbt': calculated_total_PBT,  # Add total PBT for reference
                     'total_construction_cost': calculated_total_construction_cost,  # Add total construction cost
                     'total_land_cost': calculated_total_land_cost,  # Add total land cost
@@ -804,6 +831,10 @@ def main():
                 
                 save_result = save_project_to_mongodb(current_project_data, project_name, rnav_value)
                 if save_result["success"]:
+                    # Debug: Confirm what was saved
+                    st.sidebar.success("✅ Save operation completed!")
+                    st.sidebar.write(f"🔍 **Saved RNAV:** {format_vnd_billions(rnav_value) if rnav_value else 'None'}")
+                    
                     if rnav_value is not None:
                         st.sidebar.success(f"{save_result['message']}\n💰 RNAV: {format_vnd_billions(rnav_value)}\n💵 Total Revenue: {format_vnd_billions(calculated_total_revenue)}\n📈 Total PAT: {format_vnd_billions(calculated_total_PAT)}")
                     else:
@@ -915,26 +946,74 @@ def main():
     
     with pnl_col:
         st.header("P&L Schedule")
-        st.dataframe(df_pnl)
+        # Create a copy and modify year labels to avoid duplicates
+        df_pnl_display = df_pnl.copy()
+        
+        # Add suffix to years based on whether they're past, present, or future
+        def format_year_label_unique(year, index):
+            if isinstance(year, (int, float)) and not pd.isna(year):
+                year_int = int(year)
+                if year_int < current_year:
+                    return f"{year_int}"
+                elif year_int == current_year:
+                    return f"{year_int}-Present"
+                else:
+                    return f"{year_int}F"
+            else:
+                return f"{str(year)}"  # Keep non-year values with index
+        
+        # Apply formatting to Year column if it exists with unique indices
+        if 'Year' in df_pnl_display.columns:
+            df_pnl_display['Year'] = [format_year_label_unique(year, i) for i, year in enumerate(df_pnl_display['Year'])]
+        
+        # Remove the Type column before transposing to avoid duplication issues
+        if 'Type' in df_pnl_display.columns:
+            df_pnl_display = df_pnl_display.drop('Type', axis=1)
+        
+        # Transpose the P&L dataframe so years are columns
+        try:
+            df_pnl_transposed = df_pnl_display.set_index('Year').transpose()
+            st.dataframe(df_pnl_transposed)
+        except ValueError as e:
+            st.error(f"Error transposing P&L data: {e}")
+            st.dataframe(df_pnl_display)
     
     with rnav_col:
         st.header("RNAV Calculation")
-        st.dataframe(df_rnav)
+        # Create a copy and modify year labels to avoid duplicates
+        df_rnav_display = df_rnav.copy()
+        
+        # Apply the same year formatting to RNAV data with unique indices
+        if 'Year' in df_rnav_display.columns:
+            df_rnav_display['Year'] = [format_year_label_unique(year, i) for i, year in enumerate(df_rnav_display['Year'])]
+        
+        # Transpose the RNAV dataframe so years are columns
+        try:
+            df_rnav_transposed = df_rnav_display.set_index('Year').transpose()
+            st.dataframe(df_rnav_transposed)
+        except ValueError as e:
+            st.error(f"Error transposing RNAV data: {e}")
+            st.dataframe(df_rnav_display)
 
     st.subheader("RNAV (Total Discounted Cash Flow)")
     
-    # Get RNAV value from the total row
+    # Get RNAV value from the total row (using same logic as save section)
     try:
         total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
         if not total_row.empty:
-            rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
+            display_rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
         else:
             # Fallback to old method
-            rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
+            display_rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
     except:
-        rnav_value = 0
+        display_rnav_value = 0
     
-    st.write(f"**{format_vnd_billions(rnav_value)}**")
+    st.write(f"**{format_vnd_billions(display_rnav_value)}**")
+    
+    # Debug: Show display RNAV calculation details
+    st.write("🔍 **Debug: Display RNAV Details**")
+    st.write(f"Display RNAV Value: {format_vnd_billions(display_rnav_value)}")
+    st.write(f"Raw Display RNAV: {display_rnav_value:,.0f} VND")
     
     # Show RNAV history if available
     if selected_project_data and 'rnav_value' in selected_project_data and selected_project_data['rnav_value'] is not None:
@@ -943,12 +1022,12 @@ def main():
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Current RNAV", format_vnd_billions(rnav_value))
+            st.metric("Current RNAV", format_vnd_billions(display_rnav_value))
         with col2:
             st.metric(
                 "Stored RNAV", 
                 format_vnd_billions(stored_rnav),
-                delta=format_vnd_billions(rnav_value - stored_rnav)
+                delta=format_vnd_billions(display_rnav_value - stored_rnav)
             )
         with col3:
             # Show stored total revenue and PAT if available
@@ -960,9 +1039,6 @@ def main():
                 st.metric("Stored PAT", format_vnd_billions(stored_pat))
         
         st.caption(f"📅 Last stored: {last_updated}")
-    
-    if min(construction_start_year, sales_start_year) < current_year:
-        st.info(f"💡 **Note:** Project started {current_year - min(construction_start_year, sales_start_year)} years ago. RNAV calculation excludes historical cash flows and only considers future value from {current_year} onwards.")
 
     st.header("Cash Flow Chart")
     # Filter out the "Total" row and create chart with years on x-axis
