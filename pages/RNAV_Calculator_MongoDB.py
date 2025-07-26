@@ -648,7 +648,7 @@ def main():
             min_value=sales_start_year
         )
         complete_year = st.number_input(
-            "Project Completion Year", 
+            "Revenue Booking End Year", 
             value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, max(construction_start_year, sales_start_year) + 5),
             min_value=max(construction_start_year, sales_start_year) + 1
         )
@@ -927,10 +927,7 @@ def main():
         "tax_expense": len(tax_expense),
         "land_use_right_payment": len(land_use_right_payment)
     }
-    
-    # Debug information
-    st.sidebar.write("Schedule lengths:", schedules_info)
-    
+        
     # Ensure all schedules have the same length
     expected_length = num_years
     if not all(length == expected_length for length in schedules_info.values()):
@@ -970,6 +967,12 @@ def main():
         if 'Type' in df_pnl_display.columns:
             df_pnl_display = df_pnl_display.drop('Type', axis=1)
         
+        # Format numeric columns to remove decimals and add commas
+        for col in df_pnl_display.columns:
+            if col != 'Year':  # Don't format the Year column
+                if df_pnl_display[col].dtype in ['float64', 'int64']:
+                    df_pnl_display[col] = df_pnl_display[col].apply(lambda x: f"{int(x):,}" if pd.notna(x) else "")
+        
         # Transpose the P&L dataframe so years are columns
         try:
             df_pnl_transposed = df_pnl_display.set_index('Year').transpose()
@@ -995,7 +998,7 @@ def main():
             st.error(f"Error transposing RNAV data: {e}")
             st.dataframe(df_rnav_display)
 
-    st.subheader("RNAV (Total Discounted Cash Flow)")
+    #st.subheader("RNAV (Total Discounted Cash Flow)")
     
     # Get RNAV value from the total row (using same logic as save section)
     try:
@@ -1008,36 +1011,36 @@ def main():
     except:
         display_rnav_value = 0
     
-    st.write(f"**{format_vnd_billions(display_rnav_value)}**")
+    #st.write(f"**{format_vnd_billions(display_rnav_value)}**")
     
-    # Debug: Show display RNAV calculation details
-    st.write("🔍 **Debug: Display RNAV Details**")
-    st.write(f"Display RNAV Value: {format_vnd_billions(display_rnav_value)}")
-    st.write(f"Raw Display RNAV: {display_rnav_value:,.0f} VND")
     
     # Show RNAV history if available
     if selected_project_data and 'rnav_value' in selected_project_data and selected_project_data['rnav_value'] is not None:
         stored_rnav = selected_project_data['rnav_value']
         last_updated = selected_project_data.get('last_updated', 'Unknown')
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             st.metric("Current RNAV", format_vnd_billions(display_rnav_value))
+            st.metric("Total Revenue", format_vnd_billions(total_revenue))
+            st.metric("Total PAT", format_vnd_billions(total_estimated_PAT))
         with col2:
             st.metric(
                 "Stored RNAV", 
                 format_vnd_billions(stored_rnav),
                 delta=format_vnd_billions(display_rnav_value - stored_rnav)
             )
-        with col3:
             # Show stored total revenue and PAT if available
             if 'total_revenue' in selected_project_data:
                 stored_revenue = selected_project_data['total_revenue']
-                st.metric("Stored Revenue", format_vnd_billions(stored_revenue))
+                st.metric("Stored Revenue", format_vnd_billions(stored_revenue),
+                delta = format_vnd_billions(total_revenue - stored_revenue))
             if 'total_pat' in selected_project_data:
                 stored_pat = selected_project_data['total_pat']
-                st.metric("Stored PAT", format_vnd_billions(stored_pat))
-        
+                st.metric("Stored PAT", format_vnd_billions(stored_pat),
+                delta= format_vnd_billions(total_estimated_PAT - stored_pat))
+
+
         st.caption(f"📅 Last stored: {last_updated}")
 
     st.header("Cash Flow Chart")

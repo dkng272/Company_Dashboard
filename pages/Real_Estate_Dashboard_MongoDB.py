@@ -138,7 +138,7 @@ def format_vnd_display(value):
         return "N/A"
     
     if value >= 1_000_000_000:
-        return f"{value/1_000_000_000:,.1f}B VND"
+        return f"{value/1_000_000_000:,.0f}"
     elif value >= 1_000_000:
         return f"{value/1_000_000:,.0f}M VND"
     else:
@@ -351,20 +351,23 @@ def main():
         display_projects['ASP (VND/m²)'] = display_projects['average_selling_price'].apply(format_vnd_display)
         display_projects['NSA'] = display_projects['net_sellable_area'].apply(format_area_display)
         display_projects['RNAV'] = display_projects['rnav_value'].apply(format_vnd_display)
+        display_projects['Total Revenue'] = display_projects['total_revenue'].apply(format_vnd_display)
+        display_projects['Total PAT'] = display_projects['total_pat'].apply(format_vnd_display)
         display_projects['Last Updated'] = pd.to_datetime(display_projects['last_updated'], errors='coerce').dt.strftime('%Y-%m-%d')
         
         # Select columns for display - reordered to show RNAV prominently
         display_cols = [
-            'project_name', 'location', 'RNAV', 'Units', 'ASP (VND/m²)', 'NSA',
-            'construction_start_year', 'project_completion_year', 'Last Updated'
+            'project_name', 'location', 'RNAV', 'Total Revenue', 'Total PAT', 'Units', 'ASP (VND/m²)', 'NSA',
+            'construction_start_year', 'revenue_booking_start_year', 'project_completion_year', 'Last Updated'
         ]
         
         # Rename columns for better display
         column_names = {
             'project_name': 'Project Name',
             'location': 'Location',
-            'construction_start_year': 'Start Year',
-            'project_completion_year': 'Completion Year'
+            'construction_start_year': 'Construction Start Year',
+            'revenue_booking_start_year': 'Revenue Booking Start Year',
+            'project_completion_year': 'Revenue Booking End Year'
         }
         
         display_table = display_projects[display_cols].rename(columns=column_names)
@@ -375,22 +378,426 @@ def main():
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Project Name": st.column_config.TextColumn("Project Name", width="large"),
-                "RNAV": st.column_config.TextColumn("🏆 RNAV", width="medium"),
+                "Project Name": st.column_config.TextColumn("Project Name", width="medium"),
+                "RNAV": st.column_config.TextColumn("RNAV", width="medium"),
+                "Total Revenue": st.column_config.TextColumn("Total Revenue", width="small"),
+                "Total PAT": st.column_config.TextColumn("Total PAT", width="small"),
                 "Units": st.column_config.TextColumn("Units", width="small"),
                 "ASP (VND/m²)": st.column_config.TextColumn("ASP", width="small"),
                 "NSA": st.column_config.TextColumn("NSA", width="small"),
-                "Start Year": st.column_config.NumberColumn("Start", width="small"),
-                "Completion Year": st.column_config.NumberColumn("Complete", width="small"),
+                "Construction Start Year": st.column_config.NumberColumn("Construction Start", width="small"),
+                "Revenue Booking Start Year": st.column_config.NumberColumn("Revenue Booking Start Year", width="small"),
+                "Revenue Booking End Year": st.column_config.NumberColumn("Revenue Booking End Year", width="small"),
                 "Last Updated": st.column_config.TextColumn("Updated", width="small")
             },
             disabled=True
         )
         
+        st.markdown("---")
+        
+        # Revenue Summary Table
+        st.subheader("📈 Revenue Summary by Year")
+        
+        # Calculate revenue summary for each project
+        if not company_projects.empty:
+            # Get the range of years from all projects
+            all_years = set()
+            for _, project in company_projects.iterrows():
+                if (pd.notna(project.get('revenue_booking_start_year')) and 
+                    pd.notna(project.get('project_completion_year'))):
+                    start_year = int(project['revenue_booking_start_year'])
+                    end_year = int(project['project_completion_year'])
+                    all_years.update(range(start_year, end_year + 1))
+            
+            if all_years:
+                # Sort years
+                year_columns = sorted(list(all_years))
+                
+                # Create revenue summary table
+                revenue_summary_data = []
+                
+                for _, project in company_projects.iterrows():
+                    row_data = {'Project Name': project['project_name']}
+                    
+                    # Get total revenue for this project
+                    total_revenue = 0
+                    if pd.notna(project.get('total_revenue')):
+                        total_revenue = project['total_revenue']
+                    
+                    # Calculate annual revenue distribution
+                    project_years = []
+                    if (pd.notna(project.get('revenue_booking_start_year')) and 
+                        pd.notna(project.get('project_completion_year'))):
+                        start_year = int(project['revenue_booking_start_year'])
+                        end_year = int(project['project_completion_year'])
+                        project_years = list(range(start_year, end_year + 1))
+                    
+                    # Distribute revenue equally across booking years
+                    for year in year_columns:
+                        if year in project_years and total_revenue > 0:
+                            # Equal distribution across revenue booking period
+                            annual_revenue = total_revenue / len(project_years)
+                            row_data[str(year)] = annual_revenue
+                        else:
+                            row_data[str(year)] = 0
+                    
+                    revenue_summary_data.append(row_data)
+                
+                # Create DataFrame
+                revenue_summary_df = pd.DataFrame(revenue_summary_data)
+                
+                # Add sum row
+                sum_row = {'Project Name': 'TOTAL'}
+                for year in year_columns:
+                    year_str = str(year)
+                    if year_str in revenue_summary_df.columns:
+                        sum_row[year_str] = revenue_summary_df[year_str].sum()
+                    else:
+                        sum_row[year_str] = 0
+                
+                # Add sum row to dataframe
+                revenue_summary_df = pd.concat([revenue_summary_df, pd.DataFrame([sum_row])], ignore_index=True)
+                
+                # Format revenue values for display
+                display_revenue_summary_df = revenue_summary_df.copy()
+                for year in year_columns:
+                    year_str = str(year)
+                    if year_str in display_revenue_summary_df.columns:
+                        display_revenue_summary_df[year_str] = display_revenue_summary_df[year_str].apply(
+                            lambda x: format_vnd_display(x) if x > 0 else "-"
+                        )
+                
+                # Display the revenue summary table
+                st.data_editor(
+                    display_revenue_summary_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Project Name": st.column_config.TextColumn("Project Name", width="large"),
+                        **{str(year): st.column_config.TextColumn(str(year), width="medium") for year in year_columns}
+                    },
+                    disabled=True
+                )
+                
+                # Show total portfolio revenue across all years
+                #total_portfolio_revenue = sum(sum_row[str(year)] for year in year_columns if str(year) in sum_row)
+                #st.metric("💰 Total Portfolio Revenue (All Years)", format_vnd_display(total_portfolio_revenue))
+                
+            else:
+                st.info("No valid revenue booking timeline data available for revenue summary.")
+        
+        st.markdown("---")
+        # PAT Summary Table
+        st.subheader("📈 PAT Summary by Year")
+
+        # Calculate PAT summary for each project
+        if not company_projects.empty:
+            # Get the range of years from all projects
+            all_years = set()
+            for _, project in company_projects.iterrows():
+                if (pd.notna(project.get('revenue_booking_start_year')) and 
+                    pd.notna(project.get('project_completion_year'))):
+                    start_year = int(project['revenue_booking_start_year'])
+                    end_year = int(project['project_completion_year'])
+                    all_years.update(range(start_year, end_year + 1))
+            
+            if all_years:
+                # Sort years
+                year_columns = sorted(list(all_years))
+
+                # Create PAT summary table
+                pat_summary_data = []
+
+                for _, project in company_projects.iterrows():
+                    row_data = {'Project Name': project['project_name']}
+
+                    # Get total PAT for this project
+                    total_pat = 0
+                    if pd.notna(project.get('total_pat')):
+                        total_pat = project['total_pat']
+
+                    # Calculate annual PAT distribution
+                    project_years = []
+                    if (pd.notna(project.get('revenue_booking_start_year')) and 
+                        pd.notna(project.get('project_completion_year'))):
+                        start_year = int(project['revenue_booking_start_year'])
+                        end_year = int(project['project_completion_year'])
+                        project_years = list(range(start_year, end_year + 1))
+
+                    # Distribute PAT equally across booking years
+                    for year in year_columns:
+                        if year in project_years and total_pat > 0:
+                            # Equal distribution across PAT booking period
+                            annual_pat = total_pat / len(project_years)
+                            row_data[str(year)] = annual_pat
+                        else:
+                            row_data[str(year)] = 0
+
+                    pat_summary_data.append(row_data)
+
+                # Create DataFrame
+                pat_summary_df = pd.DataFrame(pat_summary_data)
+
+                # Add sum row
+                sum_row = {'Project Name': 'TOTAL'}
+                for year in year_columns:
+                    year_str = str(year)
+                    if year_str in pat_summary_df.columns:
+                        sum_row[year_str] = pat_summary_df[year_str].sum()
+                    else:
+                        sum_row[year_str] = 0
+                
+                # Add sum row to dataframe
+                pat_summary_df = pd.concat([pat_summary_df, pd.DataFrame([sum_row])], ignore_index=True)
+
+                # Format PAT values for display
+                display_pat_summary_df = pat_summary_df.copy()
+                for year in year_columns:
+                    year_str = str(year)
+                    if year_str in display_pat_summary_df.columns:
+                        display_pat_summary_df[year_str] = display_pat_summary_df[year_str].apply(
+                            lambda x: format_vnd_display(x) if x > 0 else "-"
+                        )
+
+                # Display the PAT summary table
+                st.data_editor(
+                    display_pat_summary_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Project Name": st.column_config.TextColumn("Project Name", width="large"),
+                        **{str(year): st.column_config.TextColumn(str(year), width="medium") for year in year_columns}
+                    },
+                    disabled=True
+                )
+
+                # Show total portfolio PAT across all years
+                #total_portfolio_pat = sum(sum_row[str(year)] for year in year_columns if str(year) in sum_row)
+                #st.metric("💰 Total Portfolio PAT (All Years)", format_vnd_display(total_portfolio_pat))
+
+            else:
+                st.info("No valid revenue booking timeline data available for revenue summary.")
         
         st.markdown("---")
         
+        # Stacked Column Chart for Revenue by Project and Year
+        st.subheader("📊 Revenue by Year - Project Contribution Breakdown")
         
+        # Calculate data for the stacked chart
+        if not company_projects.empty:
+            # Get the range of years from all projects
+            chart_years = set()
+            for _, project in company_projects.iterrows():
+                if (pd.notna(project.get('revenue_booking_start_year')) and 
+                    pd.notna(project.get('project_completion_year'))):
+                    start_year = int(project['revenue_booking_start_year'])
+                    end_year = int(project['project_completion_year'])
+                    chart_years.update(range(start_year, end_year + 1))
+            
+            if chart_years:
+                # Sort years
+                sorted_years = sorted(list(chart_years))
+                
+                # Create data structure for stacked chart
+                chart_data = {}
+                project_names = []
+                
+                # Initialize data structure
+                for _, project in company_projects.iterrows():
+                    project_name = project['project_name']
+                    project_names.append(project_name)
+                    chart_data[project_name] = {year: 0 for year in sorted_years}
+                
+                # Calculate revenue contribution for each project by year
+                for _, project in company_projects.iterrows():
+                    project_name = project['project_name']
+                    
+                    # Get total revenue for this project
+                    total_revenue = project.get('total_revenue', 0) if pd.notna(project.get('total_revenue')) else 0
+                    
+                    # Calculate project years
+                    project_years = []
+                    if (pd.notna(project.get('revenue_booking_start_year')) and 
+                        pd.notna(project.get('project_completion_year'))):
+                        start_year = int(project['revenue_booking_start_year'])
+                        end_year = int(project['project_completion_year'])
+                        project_years = list(range(start_year, end_year + 1))
+                    
+                    # Distribute revenue equally across project years
+                    if project_years and total_revenue > 0:
+                        annual_revenue = total_revenue / len(project_years)
+                        
+                        for year in project_years:
+                            if year in chart_data[project_name]:
+                                chart_data[project_name][year] = annual_revenue / 1_000_000_000  # Convert to billions
+                
+                # Create the stacked bar chart using Plotly
+                import plotly.graph_objects as go
+                import plotly.colors as colors
+                
+                fig = go.Figure()
+                
+                # Generate colors for each project
+                color_palette = colors.qualitative.Set3[:len(project_names)]
+                if len(project_names) > len(color_palette):
+                    color_palette = color_palette * (len(project_names) // len(color_palette) + 1)
+                
+                # Add a trace for each project
+                for i, project_name in enumerate(project_names):
+                    y_values = [chart_data[project_name][year] for year in sorted_years]
+                    
+                    # Only add trace if project has non-zero values
+                    if any(val > 0 for val in y_values):
+                        fig.add_trace(go.Bar(
+                            x=sorted_years,
+                            y=y_values,
+                            name=project_name[:20] + "..." if len(project_name) > 20 else project_name,  # Truncate long names
+                            marker_color=color_palette[i],
+                            text=[f'{val:.1f}B' if val > 0 else '' for val in y_values],
+                            textposition='inside',
+                            textfont=dict(size=10)
+                        ))
+                
+                # Update layout
+                fig.update_layout(
+                    title=f'{selected_ticker} - Revenue Breakdown by Project and Year',
+                    xaxis_title='Year',
+                    yaxis_title='Revenue (Billions VND)',
+                    barmode='stack',
+                    height=600,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="left",
+                        x=1.02
+                    ),
+                    xaxis=dict(
+                        tickmode='linear',
+                        tick0=min(sorted_years),
+                        dtick=1
+                    ),
+                    margin=dict(r=200)  # Add right margin for legend
+                )
+                
+                # Display the chart
+                st.plotly_chart(fig, use_container_width=True)
+                
+            else:
+                st.info("No valid timeline data available for chart visualization.")
+        
+        st.markdown("---")
+        
+        # Stacked Column Chart for PAT by Project and Year
+        st.subheader("📊 PAT by Year - Project Contribution Breakdown")
+        
+        # Calculate data for the PAT stacked chart
+        if not company_projects.empty:
+            # Get the range of years from all projects
+            chart_years = set()
+            for _, project in company_projects.iterrows():
+                if (pd.notna(project.get('revenue_booking_start_year')) and 
+                    pd.notna(project.get('project_completion_year'))):
+                    start_year = int(project['revenue_booking_start_year'])
+                    end_year = int(project['project_completion_year'])
+                    chart_years.update(range(start_year, end_year + 1))
+            
+            if chart_years:
+                # Sort years
+                sorted_years = sorted(list(chart_years))
+                
+                # Create data structure for PAT stacked chart
+                pat_chart_data = {}
+                project_names = []
+                
+                # Initialize data structure
+                for _, project in company_projects.iterrows():
+                    project_name = project['project_name']
+                    project_names.append(project_name)
+                    pat_chart_data[project_name] = {year: 0 for year in sorted_years}
+                
+                # Calculate PAT contribution for each project by year
+                for _, project in company_projects.iterrows():
+                    project_name = project['project_name']
+                    
+                    # Get total PAT for this project
+                    total_pat = project.get('total_pat', 0) if pd.notna(project.get('total_pat')) else 0
+                    
+                    # Calculate project years
+                    project_years = []
+                    if (pd.notna(project.get('revenue_booking_start_year')) and 
+                        pd.notna(project.get('project_completion_year'))):
+                        start_year = int(project['revenue_booking_start_year'])
+                        end_year = int(project['project_completion_year'])
+                        project_years = list(range(start_year, end_year + 1))
+                    
+                    # Distribute PAT equally across project years
+                    if project_years and total_pat > 0:
+                        annual_pat = total_pat / len(project_years)
+                        
+                        for year in project_years:
+                            if year in pat_chart_data[project_name]:
+                                pat_chart_data[project_name][year] = annual_pat / 1_000_000_000  # Convert to billions
+                
+                # Create the PAT stacked bar chart using Plotly
+                import plotly.graph_objects as go
+                import plotly.colors as colors
+                
+                pat_fig = go.Figure()
+                
+                # Generate colors for each project (using different palette for distinction)
+                color_palette = colors.qualitative.Pastel[:len(project_names)]
+                if len(project_names) > len(color_palette):
+                    color_palette = color_palette * (len(project_names) // len(color_palette) + 1)
+                
+                # Add a trace for each project
+                for i, project_name in enumerate(project_names):
+                    y_values = [pat_chart_data[project_name][year] for year in sorted_years]
+                    
+                    # Only add trace if project has non-zero values
+                    if any(val > 0 for val in y_values):
+                        pat_fig.add_trace(go.Bar(
+                            x=sorted_years,
+                            y=y_values,
+                            name=project_name[:20] + "..." if len(project_name) > 20 else project_name,  # Truncate long names
+                            marker_color=color_palette[i],
+                            text=[f'{val:.1f}B' if val > 0 else '' for val in y_values],
+                            textposition='inside',
+                            textfont=dict(size=10)
+                        ))
+                
+                # Update layout for PAT chart
+                pat_fig.update_layout(
+                    title=f'{selected_ticker} - PAT Breakdown by Project and Year',
+                    xaxis_title='Year',
+                    yaxis_title='PAT (Billions VND)',
+                    barmode='stack',
+                    height=600,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="v",
+                        yanchor="top",
+                        y=1,
+                        xanchor="left",
+                        x=1.02
+                    ),
+                    xaxis=dict(
+                        tickmode='linear',
+                        tick0=min(sorted_years),
+                        dtick=1
+                    ),
+                    margin=dict(r=200)  # Add right margin for legend
+                )
+                
+                # Display the PAT chart
+                st.plotly_chart(pat_fig, use_container_width=True)
+                
+                                
+            else:
+                st.info("No valid timeline data available for PAT chart visualization.")
+        
+        st.markdown("---")
 
 if __name__ == "__main__":
     main()
