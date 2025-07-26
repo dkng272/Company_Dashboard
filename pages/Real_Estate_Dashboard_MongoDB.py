@@ -276,7 +276,7 @@ def main():
                 with col5:
                     st.metric("Avg Price", format_vnd_display(row['Avg Price (VND/m²)']))
                 with col6:
-                    st.metric("🏆 Total RNAV", format_vnd_display(row['Total RNAV']))
+                    st.metric("Total RNAV", format_vnd_display(row['Total RNAV']))
             else:
                 col1, col2, col3, col4, col5 = st.columns(5)
                 
@@ -289,7 +289,7 @@ def main():
                 with col4:
                     st.metric("Avg Price", format_vnd_display(row['Avg Price (VND/m²)']))
                 with col5:
-                    st.metric("🏆 Total RNAV", format_vnd_display(row['Total RNAV']))
+                    st.metric("Total RNAV", format_vnd_display(row['Total RNAV']))
             
             st.markdown("---")
         
@@ -387,79 +387,10 @@ def main():
             disabled=True
         )
         
-        # Show RNAV statistics
-        st.markdown("---")
-        st.subheader("📊 RNAV Analysis")
-        
-        # Filter projects with RNAV data
-        projects_with_rnav = company_projects[company_projects['rnav_value'].notna() & (company_projects['rnav_value'] > 0)]
-        
-        if len(projects_with_rnav) > 0:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Projects with RNAV", f"{len(projects_with_rnav)}/{total_projects}")
-            with col2:
-                avg_rnav = projects_with_rnav['rnav_value'].mean()
-                st.metric("Avg RNAV per Project", format_vnd_display(avg_rnav))
-            with col3:
-                max_rnav = projects_with_rnav['rnav_value'].max()
-                st.metric("Highest RNAV", format_vnd_display(max_rnav))
-            with col4:
-                max_project = projects_with_rnav.loc[projects_with_rnav['rnav_value'].idxmax(), 'project_name']
-                st.metric("Top Project", max_project)
-        else:
-            st.warning("⚠️ No RNAV data available for projects in this company. Calculate RNAV for projects to see analysis.")
         
         st.markdown("---")
         
-        # Project selection for RNAV calculator
-        st.subheader("🧮 Open RNAV Calculator")
         
-        project_names = company_projects['project_name'].tolist()
-        selected_project = st.selectbox(
-            "Select a project to analyze:",
-            options=["Select a project..."] + project_names,
-            index=0
-        )
-        
-        if selected_project != "Select a project...":
-            # Get project data
-            project_data = company_projects[company_projects['project_name'] == selected_project].iloc[0]
-            
-            # Display project summary with RNAV
-            st.info(f"📊 **Selected Project:** {selected_project}")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.write(f"**Units:** {format_units_display(project_data['total_units'])}")
-                st.write(f"**NSA:** {format_area_display(project_data['net_sellable_area'])}")
-                st.write(f"**Location:** {project_data.get('location', 'N/A')}")
-            with col2:
-                st.write(f"**ASP:** {format_vnd_display(project_data['average_selling_price'])}")
-                st.write(f"**GFA:** {format_area_display(project_data['gross_floor_area'])}")
-                st.write(f"**Land Cost/m²:** {format_vnd_display(project_data.get('land_cost_per_sqm', 0))}")
-            with col3:
-                st.write(f"**Land Area:** {format_area_display(project_data['land_area'])}")
-                st.write(f"**Construction Cost/m²:** {format_vnd_display(project_data['construction_cost_per_sqm'])}")
-                st.write(f"**Construction Years:** {project_data.get('construction_years', 'N/A')}")
-            with col4:
-                st.write(f"**🏆 Current RNAV:** {format_vnd_display(project_data['rnav_value'])}")
-                st.write(f"**WACC Rate:** {project_data.get('wacc_rate', 0):.1%}")
-                if pd.notna(project_data['last_updated']):
-                    last_updated = pd.to_datetime(project_data['last_updated']).strftime('%Y-%m-%d')
-                    st.write(f"**Last Updated:** {last_updated}")
-                else:
-                    st.write("**Status:** Not calculated")
-            
-            # Button to open RNAV calculator
-            if st.button(f"🧮 Open RNAV Calculator for {selected_project}", type="primary"):
-                # Store project data in session state
-                st.session_state['preload_project_data'] = project_data.to_dict()
-                st.session_state['preload_project_name'] = selected_project
-                
-                # Show success message and navigation instruction
-                st.success(f"✅ Project data loaded! Navigate to 'Real Estate RNAV Copy' page to see the pre-loaded calculator.")
-                st.info("💡 **Next Step:** Use the sidebar navigation to go to 'Real Estate RNAV Copy' page.")
 
 if __name__ == "__main__":
     main()

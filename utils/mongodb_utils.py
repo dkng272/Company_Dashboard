@@ -190,7 +190,7 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
         db = client.get_database(db_name)
         collection = db.get_collection(collection_name)
         
-        # Prepare document including location
+        # Prepare document including location and new financial fields
         document = {
             "project_name": project_name,
             "company_ticker": project_data.get('company_ticker', 'MANUAL'),
@@ -214,6 +214,13 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
             "sga_percentage": project_data.get('sga_percentage', 0.08),
             "wacc_rate": project_data.get('wacc_rate', 0.12),
             "rnav_value": rnav_value,
+            # Add new financial fields
+            "total_revenue": project_data.get('total_revenue', 0),
+            "total_pat": project_data.get('total_pat', 0),
+            "total_pbt": project_data.get('total_pbt', 0),
+            "total_construction_cost": project_data.get('total_construction_cost', 0),
+            "total_land_cost": project_data.get('total_land_cost', 0),
+            "total_sga_cost": project_data.get('total_sga_cost', 0),
             "last_updated": datetime.datetime.now(),
             "created_date": datetime.datetime.now()
         }

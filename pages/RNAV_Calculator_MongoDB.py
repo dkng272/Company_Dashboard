@@ -90,7 +90,7 @@ def main():
             st.info(f"📁 Collections: `Companies`, `RealEstateProjects`")
         else:
             st.error("❌ MongoDB connection failed")
-            st.info("Using manual entry mode only")
+            st.info("Using manual entry mode only - You cannot save projects to MongoDB without a connection.")
 
     # Get current calendar year automatically
     current_calendar_year = datetime.datetime.now().year
@@ -123,9 +123,11 @@ def main():
             st.warning("No projects found in MongoDB. You can still enter project details manually below.")
             #st.write("🔍 DEBUG: DataFrame is empty - check database connection and collection names")
         else:
-            st.info("MongoDB not available. Enter project details manually below.")
+            st.info("MongoDB not available. Enter project details manually below but you cannot save them.")
         project_name = st.text_input("Project Name", value="My Project")
         selected_project_data = None
+        selected_company_ticker = 'MANUAL'
+        selected_company_name = 'Manual Entry'
     else:
         # Check if we have preloaded data to set default selection
         default_company_index = 0
@@ -143,39 +145,68 @@ def main():
         )
         
         if selected_company == "Select a company...":
-            st.info("👆 Please select a company to see available projects")
-            project_name = st.text_input("Or enter project name manually:", value="My Project")
+            st.info("👆 Please select a company to see available projects or add a new project")
+            project_name = st.text_input("Project Name:", value="My Project")
             selected_project_data = None
+            selected_company_ticker = 'MANUAL'
+            selected_company_name = 'Manual Entry'
         else:
             # Extract ticker from selection
-            company_ticker = selected_company.split(" - ")[0]
-            company_name = selected_company.split(" - ")[1]
+            selected_company_ticker = selected_company.split(" - ")[0]
+            selected_company_name = selected_company.split(" - ")[1]
             
             # Project selection
-            projects = get_projects_for_company(company_ticker)
+            projects = get_projects_for_company(selected_company_ticker)
             
             if not projects:
-                st.warning(f"No projects found for {selected_company}")
-                project_name = st.text_input("Enter new project name:", value="New Project")
+                st.info(f"No existing projects found for **{selected_company}**")
+                st.markdown("**Create a new project for this company:**")
+                project_name = st.text_input(
+                    f"New Project Name for {selected_company_ticker}:", 
+                    value="",
+                    placeholder="Enter new project name..."
+                )
                 selected_project_data = None
+                
+                if project_name:
+                    st.success(f"✅ Ready to create new project: **{project_name}** for **{selected_company}**")
+                
             else:
+                # Show existing projects with option to create new one
+                st.markdown(f"**Existing projects for {selected_company}:**")
+                
                 # Check if we have preloaded project to set default
                 if preload_name and preload_name in projects:
                     default_project_index = projects.index(preload_name) + 1
                 
+                project_options = ["Select a project...", "➕ Create New Project"] + projects
                 selected_project = st.selectbox(
-                    "Select Project:",
-                    options=["Select a project..."] + projects,
-                    index=default_project_index
+                    "Choose existing project or create new:",
+                    options=project_options,
+                    index=default_project_index if default_project_index > 1 else 0
                 )
                 
                 if selected_project == "Select a project...":
-                    st.info("👆 Please select a project or enter a new one")
-                    project_name = st.text_input("Or enter new project name:", value="New Project")
+                    st.info("👆 Please select an existing project or choose 'Create New Project'")
+                    project_name = ""
                     selected_project_data = None
+                    
+                elif selected_project == "➕ Create New Project":
+                    st.markdown("**Create a new project:**")
+                    project_name = st.text_input(
+                        f"New Project Name for {selected_company_ticker}:", 
+                        value="",
+                        placeholder="Enter new project name..."
+                    )
+                    selected_project_data = None
+                    
+                    if project_name:
+                        st.success(f"✅ Ready to create new project: **{project_name}** for **{selected_company}**")
+                    
                 else:
+                    # Loading existing project
                     project_name = selected_project
-                    selected_project_data = get_project_data(company_ticker, selected_project)
+                    selected_project_data = get_project_data(selected_company_ticker, selected_project)
                     
                     if selected_project_data:
                         st.success(f"✅ Loaded project from MongoDB: {selected_project}")
@@ -207,7 +238,6 @@ def main():
                     else:
                         st.error("Error loading project data from MongoDB")
 
-    
     # Add button to get project info from Perplexity
     if "project_info" not in st.session_state:
         st.session_state["project_info"] = {}
@@ -641,110 +671,149 @@ def main():
     # Add Save Project button only if MongoDB is available
     if client:
         st.sidebar.markdown("---")
-        if st.sidebar.button("💾 Save to MongoDB", type="primary"):
-            # Calculate RNAV value before saving
-            try:
-                # Calculate totals
-                total_revenue = nsa * asp
-                total_construction_cost = -gfa * construction_cost_per_sqm
-                total_land_cost = -land_area * land_cost_per_sqm
-                total_sga_cost = -total_revenue * sga_percent
-
-                # Generate schedules
-                selling_progress = selling_progress_schedule(
-                    total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
-                )
-                sga_payment = sga_payment_schedule(
-                    total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
-                )
-                construction_payment = construction_payment_schedule(
-                    total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
-                )
-                land_use_right_payment = land_use_right_payment_schedule_single_year(
-                    total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
-                )
-
-                df_pnl = generate_pnl_schedule(
-                    total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-                    int(current_year), int(start_booking_year), int(complete_year)
-                )
-                
-                # Create tax expense schedule
-                num_years = int(complete_year) - int(current_year) + 1
-                tax_expense = []
-                for year in range(int(current_year), int(complete_year) + 1):
-                    year_data = df_pnl[df_pnl["Year"] == year]
-                    if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
-                        tax_value = year_data["Tax Expense (20%)"].iloc[0]
-                    else:
-                        tax_value = 0.0
-                    tax_expense.append(tax_value)
-
-                # Calculate RNAV
-                df_rnav = RNAV_Calculation(
-                    selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
-                )
-
-                # Get RNAV value
-                total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
-                if not total_row.empty:
-                    rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
-                else:
-                    rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
-
-            except Exception as e:
-                st.sidebar.error(f"Error calculating RNAV: {str(e)}")
-                rnav_value = None
-
-            # Determine company info
+        st.sidebar.subheader("💾 Save Project")
+        
+        # Show current project context
+        if selected_company_ticker != 'MANUAL':
+            st.sidebar.info(f"**Company:** {selected_company_ticker} - {selected_company_name}")
+        else:
+            st.sidebar.info("**Company:** Manual Entry")
+            
+        if project_name:
+            st.sidebar.info(f"**Project:** {project_name}")
+            
+            # Show save action type
             if selected_project_data:
-                # Use existing company info from selected project
-                company_ticker = selected_project_data.get('company_ticker', 'MANUAL')
-                company_name = selected_project_data.get('company_name', 'Manual Entry')
-            elif preload_data:
-                # Use preload company info
-                company_ticker = preload_data.get('company_ticker', 'MANUAL')
-                company_name = preload_data.get('company_name', 'Manual Entry')
+                st.sidebar.warning("⚠️ **Update existing project**")
+                save_button_text = "🔄 Update Project in MongoDB"
             else:
-                # Default for manual entries
-                company_ticker = 'MANUAL'
-                company_name = 'Manual Entry'
-            
-            # Collect current project data including location
-            current_project_data = {
-                'company_ticker': company_ticker,
-                'company_name': company_name,
-                'location': location,  # Include location in saved data
-                'total_units': total_units,
-                'average_unit_size': average_unit_size,
-                'average_selling_price': asp,
-                'gross_floor_area': gfa,
-                'land_area': land_area,
-                'construction_cost_per_sqm': construction_cost_per_sqm,
-                'land_cost_per_sqm': land_cost_per_sqm,
-                'construction_start_year': construction_start_year,
-                'sale_start_year': sales_start_year,
-                'land_payment_year': land_payment_year,
-                'construction_years': construction_years,
-                'sales_years': sales_years,
-                'revenue_booking_start_year': start_booking_year,
-                'project_completion_year': complete_year,
-                'sga_percentage': sga_percent,
-                'wacc_rate': wacc_rate
-            }
-            
-            save_result = save_project_to_mongodb(current_project_data, project_name, rnav_value)
-            if save_result["success"]:
-                if rnav_value is not None:
-                    st.sidebar.success(f"{save_result['message']}\n💰 RNAV: {format_vnd_billions(rnav_value)}")
-                else:
-                    st.sidebar.success(save_result["message"])
-                if save_result["action"] == "saved":
-                    st.sidebar.info("💡 Project saved to MongoDB. Refresh to see in dropdown.")
+                st.sidebar.success("✅ **Create new project**")
+                save_button_text = "💾 Save New Project to MongoDB"
+        else:
+            st.sidebar.error("❌ Please enter a project name")
+            save_button_text = "💾 Save to MongoDB (Need Project Name)"
+        
+        # Save button (disabled if no project name)
+        save_disabled = not bool(project_name and project_name.strip())
+        
+        if st.sidebar.button(save_button_text, type="primary", disabled=save_disabled):
+            if not project_name or not project_name.strip():
+                st.sidebar.error("❌ Project name is required!")
+            else:
+                # Calculate RNAV value before saving
+                try:
+                    # Calculate totals
+                    total_revenue = nsa * asp
+                    total_construction_cost = -gfa * construction_cost_per_sqm
+                    total_land_cost = -land_area * land_cost_per_sqm
+                    total_sga_cost = -total_revenue * sga_percent
+
+                    # Generate schedules
+                    selling_progress = selling_progress_schedule(
+                        total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                    )
+                    sga_payment = sga_payment_schedule(
+                        total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                    )
+                    construction_payment = construction_payment_schedule(
+                        total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
+                    )
+                    land_use_right_payment = land_use_right_payment_schedule_single_year(
+                        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+                    )
+
+                    df_pnl = generate_pnl_schedule(
+                        total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
+                        int(current_year), int(start_booking_year), int(complete_year)
+                    )
+                    
+                    # Create tax expense schedule
+                    num_years = int(complete_year) - int(current_year) + 1
+                    tax_expense = []
+                    for year in range(int(current_year), int(complete_year) + 1):
+                        year_data = df_pnl[df_pnl["Year"] == year]
+                        if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
+                            tax_value = year_data["Tax Expense (20%)"].iloc[0]
+                        else:
+                            tax_value = 0.0
+                        tax_expense.append(tax_value)
+
+                    # Calculate RNAV
+                    df_rnav = RNAV_Calculation(
+                        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
+                    )
+
+                    # Get RNAV value
+                    total_row = df_rnav[df_rnav["Year"] == "Total RNAV"]
+                    if not total_row.empty:
+                        rnav_value = total_row["Discounted Cash Flow"].iloc[0] * (10**9)
+                    else:
+                        rnav_value = df_rnav.loc[df_rnav.index[-1], 'Discounted Cash Flow'] * (10**9)
+
+                except Exception as e:
+                    st.sidebar.error(f"Error calculating RNAV: {str(e)}")
+                    rnav_value = None
+                
+                # Use the selected company info (not from existing project data)
+                company_ticker = selected_company_ticker
+                company_name = selected_company_name
+                
+                # Calculate total revenue and PAT for storage
+                calculated_total_revenue = nsa * asp
+                calculated_total_construction_cost = gfa * construction_cost_per_sqm  # Positive value for storage
+                calculated_total_land_cost = land_area * land_cost_per_sqm  # Positive value for storage
+                calculated_total_sga_cost = calculated_total_revenue * sga_percent
+                calculated_total_PBT = calculated_total_revenue - calculated_total_land_cost - calculated_total_construction_cost - calculated_total_sga_cost
+                calculated_total_PAT = calculated_total_PBT * 0.8  # Assuming 20% tax rate
+                
+                # Collect current project data including location, total revenue, and total PAT
+                current_project_data = {
+                    'company_ticker': company_ticker,
+                    'company_name': company_name,
+                    'location': location,  # Include location in saved data
+                    'total_units': total_units,
+                    'average_unit_size': average_unit_size,
+                    'average_selling_price': asp,
+                    'gross_floor_area': gfa,
+                    'land_area': land_area,
+                    'construction_cost_per_sqm': construction_cost_per_sqm,
+                    'land_cost_per_sqm': land_cost_per_sqm,
+                    'construction_start_year': construction_start_year,
+                    'sale_start_year': sales_start_year,
+                    'land_payment_year': land_payment_year,
+                    'construction_years': construction_years,
+                    'sales_years': sales_years,
+                    'revenue_booking_start_year': start_booking_year,
+                    'project_completion_year': complete_year,
+                    'sga_percentage': sga_percent,
+                    'wacc_rate': wacc_rate,
+                    'total_revenue': calculated_total_revenue,  # Add total revenue
+                    'total_pat': calculated_total_PAT,  # Add total PAT
+                    'total_pbt': calculated_total_PBT,  # Add total PBT for reference
+                    'total_construction_cost': calculated_total_construction_cost,  # Add total construction cost
+                    'total_land_cost': calculated_total_land_cost,  # Add total land cost
+                    'total_sga_cost': calculated_total_sga_cost  # Add total SG&A cost
+                }
+                
+                save_result = save_project_to_mongodb(current_project_data, project_name, rnav_value)
+                if save_result["success"]:
+                    if rnav_value is not None:
+                        st.sidebar.success(f"{save_result['message']}\n💰 RNAV: {format_vnd_billions(rnav_value)}\n💵 Total Revenue: {format_vnd_billions(calculated_total_revenue)}\n📈 Total PAT: {format_vnd_billions(calculated_total_PAT)}")
+                    else:
+                        st.sidebar.success(f"{save_result['message']}\n💵 Total Revenue: {format_vnd_billions(calculated_total_revenue)}\n📈 Total PAT: {format_vnd_billions(calculated_total_PAT)}")
+                    
+                    # Show action taken
+                    if save_result["action"] == "saved":
+                        st.sidebar.info(f"✅ New project '{project_name}' created for {company_ticker}")
+                    elif save_result["action"] == "updated":
+                        st.sidebar.info(f"🔄 Project '{project_name}' updated for {company_ticker}")
+                    
                     # Refresh the database after save
                     st.rerun()
-            else:
-                st.sidebar.error(save_result["message"])
+                else:
+                    st.sidebar.error(save_result["message"])
+    else:
+        st.sidebar.info("💾 MongoDB not available - Cannot save projects")
 
     # Calculate totals
     total_revenue = nsa * asp
@@ -865,7 +934,7 @@ def main():
         stored_rnav = selected_project_data['rnav_value']
         last_updated = selected_project_data.get('last_updated', 'Unknown')
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Current RNAV", format_vnd_billions(rnav_value))
         with col2:
@@ -874,6 +943,14 @@ def main():
                 format_vnd_billions(stored_rnav),
                 delta=format_vnd_billions(rnav_value - stored_rnav)
             )
+        with col3:
+            # Show stored total revenue and PAT if available
+            if 'total_revenue' in selected_project_data:
+                stored_revenue = selected_project_data['total_revenue']
+                st.metric("Stored Revenue", format_vnd_billions(stored_revenue))
+            if 'total_pat' in selected_project_data:
+                stored_pat = selected_project_data['total_pat']
+                st.metric("Stored PAT", format_vnd_billions(stored_pat))
         
         st.caption(f"📅 Last stored: {last_updated}")
     
