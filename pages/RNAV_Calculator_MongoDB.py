@@ -858,7 +858,7 @@ def main():
 
     df_pnl = generate_pnl_schedule(
         total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-        int(current_year), int(start_booking_year), int(complete_year)
+        int(current_year), int(start_booking_year), int(complete_year),total_construction_cost/(10**9),0.08
     )
 
     # Create land use right payment schedule

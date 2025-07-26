@@ -137,11 +137,28 @@ def generate_pnl_schedule(
     total_sga: float,
     current_year: int,
     start_booking_year: int,
-    end_booking_year: int
+    end_booking_year: int,
+    debt_amount: float = 0.0,
+    interest_rate: float = 0.0
 ) -> pd.DataFrame:
     """
     Generate a simplified P&L schedule from start_booking_year to end_booking_year.
     Shows both historical and future data with proper labeling.
+    Now includes debt and interest expense calculations.
+    
+    Args:
+        total_revenue (float): Total revenue (VND)
+        total_land_payment (float): Total land use cost (VND) - negative value
+        total_construction_payment (float): Total construction payment (VND) - negative value
+        total_sga (float): Total SG&A (VND) - negative value
+        current_year (int): Current year (for historical vs future classification)
+        start_booking_year (int): Year revenue booking starts
+        end_booking_year (int): Year revenue booking ends
+        debt_amount (float): Total debt amount (VND) - positive value
+        interest_rate (float): Annual interest rate (e.g., 0.08 for 8%)
+        
+    Returns:
+        pd.DataFrame: Year-by-year P&L table with debt and interest calculations
     """
     if end_booking_year < start_booking_year:
         raise ValueError("end_booking_year must be >= start_booking_year")
@@ -152,6 +169,9 @@ def generate_pnl_schedule(
     land_payment_annual = total_land_payment / total_booking_years if total_booking_years > 0 else 0
     sga_annual = total_sga / total_booking_years if total_booking_years > 0 else 0
     construction_annual = total_construction_payment / total_booking_years if total_booking_years > 0 else 0
+    
+    # Calculate annual interest expense
+    annual_interest_expense = (debt_amount * interest_rate) if debt_amount > 0 and interest_rate > 0 else 0.0
 
     pnl_data = []
     for year in range(start_booking_year, end_booking_year + 1):
@@ -164,9 +184,22 @@ def generate_pnl_schedule(
         land_cost = land_payment_annual
         sga = sga_annual
         construction = construction_annual
-        pbt = revenue + land_cost + sga + construction
+        interest_expense = annual_interest_expense
+        
+        # Calculate EBITDA (Earnings Before Interest, Taxes, Depreciation, and Amortization)
+        ebitda = revenue + land_cost + sga + construction
+        
+        # Calculate EBIT (Earnings Before Interest and Taxes) - same as EBITDA for this model
+        ebit = ebitda
+        
+        # Calculate PBT (Profit Before Tax) after interest expense
+        pbt = ebit + interest_expense  # interest_expense is negative
+        
+        # Calculate tax (only on positive PBT)
         tax = -pbt * 0.2 if pbt > 0 else 0.0
-        pat = pbt + tax
+        
+        # Calculate PAT (Profit After Tax)
+        pat = pbt + tax  # tax is negative when there's profit
 
         pnl_data.append({
             "Year": year,
@@ -175,6 +208,8 @@ def generate_pnl_schedule(
             "Land Payment": land_cost,
             "Construction": construction,
             "SG&A": sga,
+            "EBITDA": ebitda,
+            "Interest Expense": interest_expense,
             "Profit Before Tax": pbt,
             "Tax Expense (20%)": tax,
             "Profit After Tax": pat
@@ -195,6 +230,8 @@ def generate_pnl_schedule(
             "Land Payment": historical_df["Land Payment"].sum(),
             "Construction": historical_df["Construction"].sum(),
             "SG&A": historical_df["SG&A"].sum(),
+            "EBITDA": historical_df["EBITDA"].sum(),
+            "Interest Expense": historical_df["Interest Expense"].sum(),
             "Profit Before Tax": historical_df["Profit Before Tax"].sum(),
             "Tax Expense (20%)": historical_df["Tax Expense (20%)"].sum(),
             "Profit After Tax": historical_df["Profit After Tax"].sum()
@@ -209,6 +246,8 @@ def generate_pnl_schedule(
             "Land Payment": future_df["Land Payment"].sum(),
             "Construction": future_df["Construction"].sum(),
             "SG&A": future_df["SG&A"].sum(),
+            "EBITDA": future_df["EBITDA"].sum(),
+            "Interest Expense": future_df["Interest Expense"].sum(),
             "Profit Before Tax": future_df["Profit Before Tax"].sum(),
             "Tax Expense (20%)": future_df["Tax Expense (20%)"].sum(),
             "Profit After Tax": future_df["Profit After Tax"].sum()
@@ -223,6 +262,8 @@ def generate_pnl_schedule(
         "Land Payment": df[df["Type"] != "Summary"]["Land Payment"].sum(),
         "Construction": df[df["Type"] != "Summary"]["Construction"].sum(),
         "SG&A": df[df["Type"] != "Summary"]["SG&A"].sum(),
+        "EBITDA": df[df["Type"] != "Summary"]["EBITDA"].sum(),
+        "Interest Expense": df[df["Type"] != "Summary"]["Interest Expense"].sum(),
         "Profit Before Tax": df[df["Type"] != "Summary"]["Profit Before Tax"].sum(),
         "Tax Expense (20%)": df[df["Type"] != "Summary"]["Tax Expense (20%)"].sum(),
         "Profit After Tax": df[df["Type"] != "Summary"]["Profit After Tax"].sum()

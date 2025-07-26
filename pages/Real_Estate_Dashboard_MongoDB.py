@@ -333,7 +333,7 @@ def main():
         with col4:
             st.metric("Avg Selling Price", format_vnd_display(avg_price))
         with col5:
-            st.metric("🏆 Total Portfolio RNAV", format_vnd_display(total_rnav))
+            st.metric("Total Portfolio RNAV", format_vnd_display(total_rnav))
         
         st.markdown("---")
         
