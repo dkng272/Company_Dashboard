@@ -386,6 +386,9 @@ def main():
                             comparison_df = pd.DataFrame(comparison_data)
                             st.dataframe(comparison_df, use_container_width=True)
                     
+                    # Force refresh to show AI suggestions in input fields
+                    st.rerun()
+                    
                 elif isinstance(info, dict) and "error" in info:
                     st.session_state["project_info"] = {}
                     st.session_state["project_info_raw"] = str(info)
@@ -445,8 +448,10 @@ def main():
         try:
             if preload_value is not None:
                 return float(preload_value)
-            elif ai_suggest:
-                return float(str(ai_suggest).replace(",", "").replace(".", ""))
+            elif ai_suggest and str(ai_suggest).strip():
+                # Clean the AI suggestion value
+                clean_value = str(ai_suggest).replace(",", "")
+                return float(clean_value)
             else:
                 return float(default)
         except Exception:
@@ -457,8 +462,10 @@ def main():
         try:
             if preload_value is not None:
                 return int(preload_value)
-            elif ai_suggest:
-                return int(str(ai_suggest).replace(",", "").replace(".", ""))
+            elif ai_suggest and str(ai_suggest).strip():
+                # Clean the AI suggestion value
+                clean_value = str(ai_suggest).replace(",", "")
+                return int(float(clean_value))
             else:
                 return int(default)
         except Exception:
@@ -483,13 +490,15 @@ def main():
             st.caption("💡 Enter project location for better documentation")
                
         # Total Units
+        ai_total_units = project_info.get('total_units') if project_info else None
         total_units = st.number_input(
             "Total Units", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_total_units,
                 preload_data.get('total_units') if preload_data else None, 
                 2500
-            ), 
+            )), 
+            step=1,
             key="total_units"
         )
         if preload_data and 'total_units' in preload_data:
@@ -497,14 +506,23 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_total_units:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_total_units))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** units")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_total_units}** units")
+        
         # Average Unit Size
+        ai_unit_size = project_info.get('average_unit_size') if project_info else None
         average_unit_size = st.number_input(
             "Average Unit Size (m²)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_unit_size,
                 preload_data.get('average_unit_size') if preload_data else None, 
                 80
-            ), 
+            )),
+            step=1,
             key="average_unit_size"
         )
         if preload_data and 'average_unit_size' in preload_data:
@@ -512,18 +530,28 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_unit_size:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_unit_size))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_unit_size}** m²")
+        
         # Calculate NSA from units and unit size
         nsa = total_units * average_unit_size
         st.info(f"📊 **Calculated Net Sellable Area:** {format_number_with_commas(str(int(nsa)))} m²")
         
         # Average Selling Price
+        ai_asp = project_info.get('asp') if project_info else None
         asp = st.number_input(
             "Average Selling Price (VND/m²)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_asp,
                 preload_data.get('average_selling_price') if preload_data else None, 
                 100_000_000
-            ), 
+            )),
+            step=1000_000,
+            format="%d",
             key="asp"
         )
         if preload_data and 'average_selling_price' in preload_data:
@@ -531,14 +559,23 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_asp:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_asp))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** VND/m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_asp}** VND/m²")
+        
         # Gross Floor Area
+        ai_gfa = project_info.get('gfa') if project_info else None
         gfa = st.number_input(
             "Gross Floor Area (m²)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_gfa,
                 preload_data.get('gross_floor_area') if preload_data else None, 
                 300_000
-            ), 
+            )),
+            step=1,
             key="gfa"
         )
         if preload_data and 'gross_floor_area' in preload_data:
@@ -546,14 +583,23 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_gfa:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_gfa))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_gfa}** m²")
+        
         # Construction Cost per sqm
+        ai_construction_cost = project_info.get('construction_cost_per_sqm') if project_info else None
         construction_cost_per_sqm = st.number_input(
             "Construction Cost per m² (VND)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_construction_cost,
                 preload_data.get('construction_cost_per_sqm') if preload_data else None, 
                 20_000_000
-            ), 
+            )),
+            step=1_000_000,
             key="construction_cost_per_sqm"
         )
         if preload_data and 'construction_cost_per_sqm' in preload_data:
@@ -561,14 +607,23 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_construction_cost:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_construction_cost))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** VND/m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_construction_cost}** VND/m²")
+        
         # Land Area
+        ai_land_area = project_info.get('land_area') if project_info else None
         land_area = st.number_input(
             "Land Area (m²)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_land_area,
                 preload_data.get('land_area') if preload_data else None, 
                 50_000
-            ), 
+            )),
+            step=1,
             key="land_area"
         )
         if preload_data and 'land_area' in preload_data:
@@ -576,58 +631,73 @@ def main():
         else:
             st.caption("💡 Using default value")
         
+        if ai_land_area:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_land_area))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_land_area}** m²")
+        
         # Land Cost per sqm
+        ai_land_cost = project_info.get('land_cost_per_sqm') if project_info else None
         land_cost_per_sqm = st.number_input(
             "Land Cost per m² (VND)", 
-            value=parse_float_with_preload(
-                "",
+            value=int(parse_float_with_preload(
+                ai_land_cost,
                 preload_data.get('land_cost_per_sqm') if preload_data else None, 
                 50_000_000
-            ), 
+            )),
+            step=1_000_000,
             key="land_cost_per_sqm"
         )
         if preload_data and 'land_cost_per_sqm' in preload_data:
             st.caption(f"📊 From database: **{format_number_with_commas(str(int(preload_data['land_cost_per_sqm'])))}** VND/m²")
         else:
             st.caption("💡 Using default value")
+        
+        if ai_land_cost:
+            try:
+                ai_value_formatted = format_number_with_commas(str(int(float(ai_land_cost))))
+                st.caption(f"🤖 AI suggestion: **{ai_value_formatted}** VND/m²")
+            except:
+                st.caption(f"🤖 AI suggestion: **{ai_land_cost}** VND/m²")
 
     with timeline_col:
         st.header("Timeline")
         
         # Remove the current year input and use calendar year automatically
         current_year = current_calendar_year
-        st.info(f"📅 **Current Year:** {current_year} (automatically set to calendar year)")
+        st.info(f"**Current Year:** {current_year}")
         
         # Separate Construction Start Year and Sales Start Year
         construction_start_year = st.number_input(
             "Construction Start Year", 
             value=parse_int_with_preload("", preload_data.get('construction_start_year') if preload_data else None, current_year),
-            min_value=current_year - 10,  # Allow up to 10 years in the past
-            max_value=current_year + 20   # Allow up to 20 years in the future
-        )
-        
-        sales_start_year = st.number_input(
-            "Sales Start Year", 
-            value=parse_int_with_preload("", preload_data.get('sale_start_year') if preload_data else None, current_year),
-            min_value=current_year - 10,  # Allow up to 10 years in the past
-            max_value=current_year + 20   # Allow up to 20 years in the future
         )
         
         # Show warning if either start year is in the past
         if construction_start_year < current_year:
             years_ago = current_year - construction_start_year
             st.warning(f"⚠️ Construction start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
-        
+
+        sales_start_year = st.number_input(
+            "Sales Start Year", 
+            value=parse_int_with_preload("", preload_data.get('sale_start_year') if preload_data else None, current_year),
+            #min_value=construction_start_year,  # Allow up to 10 years in the past
+        )
+               
         if sales_start_year < current_year:
             years_ago = current_year - sales_start_year
             st.warning(f"⚠️ Sales start year is {years_ago} year(s) in the past. Historical data will be shown but not included in RNAV calculation.")
+        
+        if sales_start_year < construction_start_year:
+            years_ago = construction_start_year - sales_start_year
+            st.warning(f"⚠️ Sales start year is {years_ago} year(s) before construction start. This is illegal in Vietnamese law and could cause RNAV or PnL issues.")
         
         # Add land payment year input
         land_payment_year = st.number_input(
             "Land Payment Year", 
             value=parse_int_with_preload("", preload_data.get('land_payment_year') if preload_data else None, construction_start_year),
-            min_value=current_year - 10,  # Allow up to 10 years in the past
-            max_value=current_year + 20   # Allow up to 20 years in the future
         )
         
         # Separate construction and sales duration
@@ -645,34 +715,43 @@ def main():
         start_booking_year = st.number_input(
             "Revenue Booking Start Year", 
             value=parse_int_with_preload("", preload_data.get('revenue_booking_start_year') if preload_data else None, max(current_year, sales_start_year + 1)),
-            min_value=sales_start_year
         )
-        complete_year = st.number_input(
+
+        if start_booking_year < sales_start_year:
+            years_ago = sales_start_year - start_booking_year
+            st.warning(f"⚠️ Start booking year is {years_ago} year(s) before sales start. This is illogical and could cause RNAV or PnL issues.")
+
+        end_booking_year = st.number_input(
             "Revenue Booking End Year", 
             value=parse_int_with_preload("", preload_data.get('project_completion_year') if preload_data else None, max(construction_start_year, sales_start_year) + 5),
-            min_value=max(construction_start_year, sales_start_year) + 1
+            min_value=start_booking_year
         )
-        
-        
+
+        if end_booking_year < start_booking_year:
+            years_ago = start_booking_year - end_booking_year
+            st.warning(f"⚠️ Complete year is {years_ago} year(s) before start booking year. This is illogical and could cause RNAV or PnL issues.")
+
         st.markdown("---")
         cost_of_debt = st.number_input(
             "Interest Rate (Cost of Debt)", 
-            min_value=0.0, max_value=1.0, 
+            min_value=0.0, 
             value=float(preload_data.get('cost_of_debt', 0.08)) if preload_data and 'cost_of_debt' in preload_data else 0.08, 
             step=0.01
         )
         sga_percent = st.number_input(
             "SG&A as % of Revenue", 
-            min_value=0.0, max_value=1.0, 
+            min_value=0.0, 
             value=float(preload_data.get('sga_percentage', 0.08)) if preload_data and 'sga_percentage' in preload_data else 0.1, 
             step=0.01
         )
         wacc_rate = st.number_input(
             "WACC (Discount Rate, e.g. 0.12 for 12%)", 
-            min_value=0.0, max_value=1.0, 
+            min_value=0.0, 
             value=float(preload_data.get('wacc_rate', 0.12)) if preload_data and 'wacc_rate' in preload_data else 0.12, 
             step=0.01
         )
+
+    project_start_year = min(construction_start_year, sales_start_year, land_payment_year, current_year)
 
     # Add Save Project button only if MongoDB is available
     if client:
@@ -728,27 +807,27 @@ def main():
 
                     # Generate schedules (same as display section)
                     selling_progress = selling_progress_schedule(
-                        display_total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                        display_total_revenue/(10**9), int(project_start_year), int(current_year), int(sales_start_year), int(sales_years), int(end_booking_year)
                     )
                     sga_payment = sga_payment_schedule(
-                        display_total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+                        display_total_sga_cost/(10**9), int(project_start_year), int(current_year), int(sales_start_year), int(sales_years), int(end_booking_year)
                     )
                     construction_payment = construction_payment_schedule(
-                        display_total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
+                        display_total_construction_cost/(10**9), int(project_start_year), int(current_year), int(construction_start_year), int(construction_years), int(end_booking_year)
                     )
                     land_use_right_payment = land_use_right_payment_schedule_single_year(
-                        display_total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+                        display_total_land_cost/(10**9), int(project_start_year), int(current_year), int(land_payment_year), int(end_booking_year)
                     )
 
                     df_pnl = generate_pnl_schedule(
-                        display_total_revenue/(10**9), display_total_land_cost/(10**9), display_total_construction_cost/(10**9), display_total_sga_cost/(10**9),
-                        int(current_year), int(start_booking_year), int(complete_year), display_total_construction_cost/(10**9), construction_years, cost_of_debt
+                        display_total_revenue/(10**9), display_total_land_cost/(10**9), display_total_construction_cost/(10**9), display_total_sga_cost/(10**9), int(project_start_year),
+                        int(current_year), int(start_booking_year), int(end_booking_year), display_total_construction_cost/(10**9), construction_years, cost_of_debt
                     )
                     
                     # Create tax expense schedule
-                    num_years = int(complete_year) - int(current_year) + 1
+                    num_years = int(end_booking_year) - int(current_year) + 1
                     tax_expense = []
-                    for year in range(int(current_year), int(complete_year) + 1):
+                    for year in range(int(current_year), int(end_booking_year) + 1):
                         year_data = df_pnl[df_pnl["Year"] == year]
                         if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
                             tax_value = year_data["Tax Expense (20%)"].iloc[0]
@@ -758,7 +837,7 @@ def main():
 
                     # Calculate RNAV (same as display section)
                     df_rnav = RNAV_Calculation(
-                        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
+                        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(project_start_year), int(current_year)
                     )
 
                     # Get RNAV value (same logic as display section)
@@ -817,7 +896,7 @@ def main():
                     'construction_years': construction_years,
                     'sales_years': sales_years,
                     'revenue_booking_start_year': start_booking_year,
-                    'project_completion_year': complete_year,
+                    'project_completion_year': end_booking_year,
                     'sga_percentage': sga_percent,
                     'wacc_rate': wacc_rate,
                     'cost_of_debt': cost_of_debt,
@@ -872,8 +951,8 @@ def main():
         st.write(f"**Construction:** {construction_start_year} - {construction_start_year + construction_years - 1}")
         st.write(f"**Sales:** {sales_start_year} - {sales_start_year + sales_years - 1}")
         st.write(f"**Land Payment:** {land_payment_year}")
-        st.write(f"**Revenue Booking:** {start_booking_year} - {complete_year}")
-        st.write(f"**Project Duration:** {complete_year - min(construction_start_year, sales_start_year) + 1} years")
+        st.write(f"**Revenue Booking:** {start_booking_year} - {end_booking_year}")
+        st.write(f"**Project Duration:** {end_booking_year - min(construction_start_year, sales_start_year) + 1} years")
     with col2:
         st.write(f"**Total Revenue:** {format_vnd_billions(total_revenue)}")
         st.write(f"**Total Construction Cost:** {format_vnd_billions(total_construction_cost)}")
@@ -885,31 +964,31 @@ def main():
     
     # Update schedule calculations to use separate construction and sales years
     selling_progress = selling_progress_schedule(
-        total_revenue/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+        total_revenue/(10**9), int(project_start_year), int(current_year), int(sales_start_year), int(sales_years), int(end_booking_year)
     )
     sga_payment = sga_payment_schedule(
-        total_sga_cost/(10**9), int(current_year), int(sales_start_year), int(sales_years), int(complete_year)
+        total_sga_cost/(10**9), int(project_start_year), int(current_year), int(sales_start_year), int(sales_years), int(end_booking_year)
     )
     construction_payment = construction_payment_schedule(
-        total_construction_cost/(10**9), int(current_year), int(construction_start_year), int(construction_years), int(complete_year)
+        total_construction_cost/(10**9), int(project_start_year), int(current_year), int(construction_start_year), int(construction_years), int(end_booking_year)
     )
 
     df_pnl = generate_pnl_schedule(
-        total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-        int(current_year), int(start_booking_year), int(complete_year),total_construction_cost/(10**9),construction_years,cost_of_debt
+        total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9), int(project_start_year),
+        int(current_year), int(start_booking_year), int(end_booking_year),total_construction_cost/(10**9),construction_years,cost_of_debt
     )
 
     # Create land use right payment schedule
     land_use_right_payment = land_use_right_payment_schedule_single_year(
-        total_land_cost/(10**9), int(current_year), int(land_payment_year), int(complete_year)
+        total_land_cost/(10**9), int(project_start_year), int(current_year), int(land_payment_year), int(end_booking_year)
     )
 
-    # Create tax expense schedule that matches the time period from current_year to complete_year
-    num_years = int(complete_year) - int(current_year) + 1
-    
-    # Get tax expense for each year from current_year to complete_year
+    # Create tax expense schedule that matches the time period from project start year to complete_year
+    num_years = int(end_booking_year) - int(project_start_year) + 1
+
+    # Get tax expense for each year from start_booking_year to complete_year
     tax_expense = []
-    for year in range(int(current_year), int(complete_year) + 1):
+    for year in range(int(project_start_year), int(end_booking_year) + 1):
         # Find tax expense for this year in the P&L schedule
         year_data = df_pnl[df_pnl["Year"] == year]
         if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
@@ -925,9 +1004,9 @@ def main():
         "construction_payment": len(construction_payment), 
         "sga_payment": len(sga_payment),
         "tax_expense": len(tax_expense),
-        "land_use_right_payment": len(land_use_right_payment)
+        "land_use_right_payment": len(land_use_right_payment),
     }
-        
+    st.write("**Schedule Lengths:**", schedules_info)
     # Ensure all schedules have the same length
     expected_length = num_years
     if not all(length == expected_length for length in schedules_info.values()):
@@ -935,7 +1014,7 @@ def main():
         st.stop()
 
     df_rnav = RNAV_Calculation(
-        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(current_year)
+        selling_progress, construction_payment, sga_payment, tax_expense, land_use_right_payment, wacc_rate, int(project_start_year), int(current_year)
     )
 
     # Create two parallel columns for P&L Schedule and RNAV Calculation
@@ -990,6 +1069,15 @@ def main():
         if 'Year' in df_rnav_display.columns:
             df_rnav_display['Year'] = [format_year_label_unique(year, i) for i, year in enumerate(df_rnav_display['Year'])]
         
+        # Format numeric columns to remove decimals and add commas
+        for col in df_rnav_display.columns:
+            if col != 'Year' and col != 'Discount Factor':  # Don't format the Year column
+                if df_rnav_display[col].dtype in ['float64', 'int64']:
+                    df_rnav_display[col] = df_rnav_display[col].apply(lambda x: f"{int(x):,}" if pd.notna(x) else "")
+            if col == 'Discount Factor':
+                # Format Discount Factor to 4 decimal places
+                df_rnav_display[col] = df_rnav_display[col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
+
         # Transpose the RNAV dataframe so years are columns
         try:
             df_rnav_transposed = df_rnav_display.set_index('Year').transpose()

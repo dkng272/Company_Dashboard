@@ -7,39 +7,40 @@ import numpy as np
 
 def selling_progress_schedule(
     total_revenue: float,
+    project_start_year: int,
     current_year: int,
-    start_year: int,
-    num_years: int,
-    complete_year: int
+    sale_start_year: int,
+    sale_num_years: int,
+    end_booking_year: int
 ) -> list:
     """
     Distribute total revenue evenly over a given number of years (num_years),
-    starting from start_year. Output is aligned from current_year to complete_year.
+    starting from start_year. Output is aligned from project_start_year to end_booking_year.
     Now allows start_year to be before current_year for historical tracking.
 
     Args:
         total_revenue (float): Total revenue
         current_year (int): Start year of the output array
-        start_year (int): Year selling begins (can be < current_year)
-        num_years (int): Number of years selling takes
-        complete_year (int): Project completion year
+        project_start_year (int): Year selling begins (can be < current_year)
+        sale_num_years (int): Number of years selling takes
+        end_booking_year (int): Project completion year
 
     Returns:
         List[float]: Annual revenue array from current_year to complete_year
     """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
-        raise ValueError("Selling period exceeds project completion year")
+    if end_booking_year < sale_start_year:
+        raise ValueError("Revenue booking end year must be >= sale start year")
+    if (sale_start_year + sale_num_years - 1) > end_booking_year:
+        raise ValueError("Selling period exceeds revenue booking end year")
 
-    annual_revenue = total_revenue / num_years
+    annual_revenue = total_revenue / sale_num_years
 
-    # Build full year list from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
+    # Build full year list from project_start_year to end_booking_year
+    full_years = list(range(project_start_year, end_booking_year + 1))
 
     # Create array with revenue in the selling years only
     revenue_by_year = [
-        annual_revenue if start_year <= year < start_year + num_years else 0.0
+        annual_revenue if sale_start_year <= year < sale_start_year + sale_num_years else 0.0
         for year in full_years
     ]
 
@@ -47,54 +48,55 @@ def selling_progress_schedule(
 
 def land_use_right_payment_schedule_single_year(
     total_payment: float,
+    project_start_year: int,
     current_year: int,
     payment_year: int,
-    complete_year: int
+    end_booking_year: int
 ) -> list:
     """
     Generate land use right payment schedule from current_year to complete_year,
     with the entire payment made in payment_year.
     """
-    if payment_year > complete_year:
-        raise ValueError("payment_year must be earlier than complete_year")
+    if payment_year > end_booking_year:
+        raise ValueError("payment_year must be earlier than end_booking_year")
+    
+    if payment_year < project_start_year:
+        raise ValueError("payment_year must be later than project_start_year")
 
-    num_years = complete_year - current_year + 1
+    num_years = end_booking_year - project_start_year + 1
     payment_array = [0.0] * num_years
 
-    if payment_year < current_year:
-        # Payment year is before the current year, so no payment in the schedule
-        pass
-    else:
-        payment_index = payment_year - current_year
-        payment_array[payment_index] = total_payment
+    payment_index = payment_year - project_start_year
+    payment_array[payment_index] = total_payment
 
     return payment_array
 
 def construction_payment_schedule(
     total_cost: float,
+    project_start_year: int,
     current_year: int,
-    start_year: int,
+    construction_start_year: int,
     num_years: int,
-    complete_year: int
+    end_booking_year: int
 ) -> list:
     """
-    Distribute total construction cost evenly over num_years starting from start_year.
-    Output is aligned from current_year to complete_year.
-    Now allows start_year to be before current_year for historical tracking.
+    Distribute total construction cost evenly over num_years starting from construction_start_year.
+    Output is aligned from current_year to end_booking_year.
+    Now allows construction_start_year to be before current_year for historical tracking.
     """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
+    if end_booking_year < construction_start_year:
+        raise ValueError("end_booking_year must be >= construction_start_year")
+    if (construction_start_year + num_years - 1) > end_booking_year:
         raise ValueError("Construction period exceeds project completion year")
 
     annual_cost = total_cost / num_years
 
-    # Create timeline from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
+    # Create timeline from current_year to end_booking_year
+    full_years = list(range(project_start_year, end_booking_year + 1))
 
     # Allocate cost to construction years
     cost_by_year = [
-        annual_cost if start_year <= year < start_year + num_years else 0.0
+        annual_cost if construction_start_year <= year < construction_start_year + num_years else 0.0
         for year in full_years
     ]
 
@@ -102,29 +104,30 @@ def construction_payment_schedule(
 
 def sga_payment_schedule(
     total_sga: float,
+    project_start_year: int,
     current_year: int,
-    start_year: int,
+    sale_start_year: int,
     num_years: int,
-    complete_year: int
+    end_booking_year: int
 ) -> list:
     """
     Distribute total SG&A evenly over a given number of years (num_years),
-    starting from start_year. Output is aligned from current_year to complete_year.
-    Now allows start_year to be before current_year for historical tracking.
+    starting from sale_start_year. Output is aligned from current_year to end_booking_year.
+    Now allows sale_start_year to be before current_year for historical tracking.
     """
-    if complete_year < start_year:
-        raise ValueError("complete_year must be >= start_year")
-    if (start_year + num_years - 1) > complete_year:
+    if end_booking_year < sale_start_year:
+        raise ValueError("end_booking_year must be >= sale_start_year")
+    if (sale_start_year + num_years - 1) > end_booking_year:
         raise ValueError("SG&A period exceeds project completion year")
 
     annual_sga = total_sga / num_years
 
     # Build full year list from current_year to complete_year
-    full_years = list(range(current_year, complete_year + 1))
+    full_years = list(range(project_start_year, end_booking_year + 1))
 
     # Create array with SG&A in the active years only
     sga_by_year = [
-        annual_sga if start_year <= year < start_year + num_years else 0.0
+        annual_sga if sale_start_year <= year < sale_start_year + num_years else 0.0
         for year in full_years
     ]
 
@@ -135,6 +138,7 @@ def generate_pnl_schedule(
     total_land_payment: float,
     total_construction_payment: float,
     total_sga: float,
+    project_start_year: int,
     current_year: int,
     start_booking_year: int,
     end_booking_year: int,
@@ -176,32 +180,34 @@ def generate_pnl_schedule(
     annual_interest_expense = (total_interest_expense / total_booking_years) if total_booking_years > 0 else 0.0
 
     pnl_data = []
-    for year in range(start_booking_year, end_booking_year + 1):
+    for year in range(project_start_year, end_booking_year + 1):
         # Determine if this is historical or future
         is_historical = year < current_year
         year_type = "Historical" if is_historical else "Future"
-        
-        # All years in the booking period have values
-        revenue = revenue_annual
-        land_cost = land_payment_annual
-        sga = sga_annual
-        construction = construction_annual
-        interest_expense = annual_interest_expense
-        print(interest_expense)
-        # Calculate EBITDA (Earnings Before Interest, Taxes, Depreciation, and Amortization)
-        ebitda = revenue + land_cost + sga + construction
-        
-        # Calculate EBIT (Earnings Before Interest and Taxes) - same as EBITDA for this model
-        ebit = ebitda
-        
-        # Calculate PBT (Profit Before Tax) after interest expense
-        pbt = ebit + interest_expense  # interest_expense is negative
-        
-        # Calculate tax (only on positive PBT)
-        tax = -pbt * 0.2 if pbt > 0 else 0.0
-        
-        # Calculate PAT (Profit After Tax)
-        pat = pbt + tax  # tax is negative when there's profit
+        if year < start_booking_year:
+            # Before revenue booking starts, all values are zero
+            revenue = 0.0
+            land_cost = 0.0
+            sga = 0.0
+            construction = 0.0
+            interest_expense = 0.0  
+            ebitda = 0.0
+            ebit = 0.0  
+            pbt = 0.0
+            tax = 0.0
+            pat = 0.0
+        else:
+            # All years in the booking period have values
+            revenue = revenue_annual
+            land_cost = land_payment_annual
+            sga = sga_annual
+            construction = construction_annual
+            interest_expense = annual_interest_expense
+            ebitda = revenue + land_cost + sga + construction
+            ebit = ebitda    
+            pbt = ebit + interest_expense
+            tax = -pbt * 0.2 if pbt > 0 else 0.0
+            pat = pbt + tax  # tax is negative when there's profit
 
         pnl_data.append({
             "Year": year,
@@ -281,6 +287,7 @@ def RNAV_Calculation(
     tax_expense_schedule: list,
     land_use_right_payment_schedule: list,
     wacc: float,
+    project_start_year: int,
     current_year: int
 ) -> pd.DataFrame:
     """
@@ -300,8 +307,10 @@ def RNAV_Calculation(
 
     data = []
     total_rnav = 0.0
+    wacc_adjust = current_year - project_start_year  # Adjusted to use project_start_year
     for i in range(n):
-        year = current_year + i
+        year = project_start_year + i
+        wacc_index = i - wacc_adjust  # Adjusted to use project_start_year
         inflow = selling_progress_schedule[i]
         
         # Break down outflow components
@@ -313,19 +322,14 @@ def RNAV_Calculation(
         total_outflow = construction_cost + sga_cost + tax_cost + land_cost
         net_cashflow = inflow + total_outflow
         
-        # Calculate discount factor (year 0 = current year)
-        discount_factor = 1 / ((1 + wacc) ** i)
+        # calculate discounted cash flow, if year < current_year, it will not be included in RNAV
+        discount_factor = 1 / ((1 + wacc) ** wacc_index) if year >= current_year else 0
         discounted_cashflow = net_cashflow * discount_factor
         
-        # Only add to RNAV if it's current year or future (i >= 0)
         total_rnav += discounted_cashflow
-
-        # Determine if this is a future cash flow for RNAV
-        included_in_rnav = True  # Since we start from current_year, all are included
 
         data.append({
             "Year": year,
-            "Year Index": i,
             "Inflow (Revenue)": inflow,
             "Construction Cost": construction_cost,
             "Land Cost": land_cost,
@@ -335,7 +339,6 @@ def RNAV_Calculation(
             "Net Cash Flow": net_cashflow,
             "Discount Factor": discount_factor,
             "Discounted Cash Flow": discounted_cashflow,
-            "Included in RNAV": "Yes" if included_in_rnav else "No"
         })
 
     df = pd.DataFrame(data)
@@ -343,7 +346,6 @@ def RNAV_Calculation(
     # Add total row
     total_row = {
         "Year": "Total RNAV",
-        "Year Index": np.nan,
         "Inflow (Revenue)": df["Inflow (Revenue)"].sum(),
         "Construction Cost": df["Construction Cost"].sum(),
         "Land Cost": df["Land Cost"].sum(),
@@ -353,7 +355,6 @@ def RNAV_Calculation(
         "Net Cash Flow": df["Net Cash Flow"].sum(),
         "Discount Factor": np.nan,
         "Discounted Cash Flow": total_rnav,
-        "Included in RNAV": "Summary"
     }
     
     df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
