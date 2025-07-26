@@ -655,10 +655,16 @@ def main():
         
         
         st.markdown("---")
+        cost_of_debt = st.number_input(
+            "Interest Rate (Cost of Debt)", 
+            min_value=0.0, max_value=1.0, 
+            value=float(preload_data.get('cost_of_debt', 0.08)) if preload_data and 'cost_of_debt' in preload_data else 0.08, 
+            step=0.01
+        )
         sga_percent = st.number_input(
             "SG&A as % of Revenue", 
             min_value=0.0, max_value=1.0, 
-            value=float(preload_data.get('sga_percentage', 0.08)) if preload_data and 'sga_percentage' in preload_data else 0.08, 
+            value=float(preload_data.get('sga_percentage', 0.08)) if preload_data and 'sga_percentage' in preload_data else 0.1, 
             step=0.01
         )
         wacc_rate = st.number_input(
@@ -724,7 +730,7 @@ def main():
 
                     df_pnl = generate_pnl_schedule(
                         total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-                        int(current_year), int(start_booking_year), int(complete_year)
+                        int(current_year), int(start_booking_year), int(complete_year), total_construction_cost, construction_years, cost_of_debt
                     )
                     
                     # Create tax expense schedule
@@ -787,12 +793,13 @@ def main():
                     'project_completion_year': complete_year,
                     'sga_percentage': sga_percent,
                     'wacc_rate': wacc_rate,
+                    'cost_of_debt': cost_of_debt,
                     'total_revenue': calculated_total_revenue,  # Add total revenue
                     'total_pat': calculated_total_PAT,  # Add total PAT
                     'total_pbt': calculated_total_PBT,  # Add total PBT for reference
                     'total_construction_cost': calculated_total_construction_cost,  # Add total construction cost
                     'total_land_cost': calculated_total_land_cost,  # Add total land cost
-                    'total_sga_cost': calculated_total_sga_cost  # Add total SG&A cost
+                    'total_sga_cost': calculated_total_sga_cost,  # Add total SG&A cost
                 }
                 
                 save_result = save_project_to_mongodb(current_project_data, project_name, rnav_value)
@@ -858,7 +865,7 @@ def main():
 
     df_pnl = generate_pnl_schedule(
         total_revenue/(10**9), total_land_cost/(10**9), total_construction_cost/(10**9), total_sga_cost/(10**9),
-        int(current_year), int(start_booking_year), int(complete_year),total_construction_cost/(10**9),0.08
+        int(current_year), int(start_booking_year), int(complete_year),total_construction_cost/(10**9),construction_years,cost_of_debt
     )
 
     # Create land use right payment schedule

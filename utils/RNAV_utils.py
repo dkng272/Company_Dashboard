@@ -139,6 +139,7 @@ def generate_pnl_schedule(
     start_booking_year: int,
     end_booking_year: int,
     debt_amount: float = 0.0,
+    debt_length: int = 0,
     interest_rate: float = 0.0
 ) -> pd.DataFrame:
     """
@@ -171,7 +172,8 @@ def generate_pnl_schedule(
     construction_annual = total_construction_payment / total_booking_years if total_booking_years > 0 else 0
     
     # Calculate annual interest expense
-    annual_interest_expense = (debt_amount * interest_rate) if debt_amount > 0 and interest_rate > 0 else 0.0
+    total_interest_expense = debt_amount * interest_rate * debt_length
+    annual_interest_expense = (total_interest_expense / total_booking_years) if total_booking_years > 0 else 0.0
 
     pnl_data = []
     for year in range(start_booking_year, end_booking_year + 1):
@@ -185,7 +187,7 @@ def generate_pnl_schedule(
         sga = sga_annual
         construction = construction_annual
         interest_expense = annual_interest_expense
-        
+        print(interest_expense)
         # Calculate EBITDA (Earnings Before Interest, Taxes, Depreciation, and Amortization)
         ebitda = revenue + land_cost + sga + construction
         

@@ -213,6 +213,7 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
             "project_completion_year": project_data.get('project_completion_year', 2028),
             "sga_percentage": project_data.get('sga_percentage', 0.08),
             "wacc_rate": project_data.get('wacc_rate', 0.12),
+            "cost_of_debt": project_data.get('cost_of_debt', 0.08),  # New field for cost of debt
             "rnav_value": rnav_value,
             # Add new financial fields
             "total_revenue": project_data.get('total_revenue', 0),
