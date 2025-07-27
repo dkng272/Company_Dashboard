@@ -200,6 +200,7 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
             "net_sellable_area": project_data.get('total_units', 0) * project_data.get('average_unit_size', 0),
             "average_unit_size": project_data.get('average_unit_size', 0),
             "average_selling_price": project_data.get('average_selling_price', 0),
+            "price_increment_factor": project_data.get('price_increment_factor', 0.0),  # New field for price increment factor
             "gross_floor_area": project_data.get('gross_floor_area', 0),
             "land_area": project_data.get('land_area', 0),
             "construction_cost_per_sqm": project_data.get('construction_cost_per_sqm', 0),

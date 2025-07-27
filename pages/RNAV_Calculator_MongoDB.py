@@ -566,6 +566,8 @@ def main():
             except:
                 st.caption(f"🤖 AI suggestion: **{ai_asp}** VND/m²")
         
+        
+        
         # Gross Floor Area
         ai_gfa = project_info.get('gfa') if project_info else None
         gfa = st.number_input(
@@ -732,6 +734,13 @@ def main():
             st.warning(f"⚠️ Complete year is {years_ago} year(s) before start booking year. This is illogical and could cause RNAV or PnL issues.")
 
         st.markdown("---")
+        
+        price_increment_factor = st.number_input(
+            "Price Increment Factor (e.g. 0.05 for 5% increase per year)",             
+            value=float(preload_data.get('price_increment_factor', 0.00)) if preload_data and 'price_increment_factor' in preload_data else 0.00, 
+            step=0.01,
+        )
+        
         cost_of_debt = st.number_input(
             "Interest Rate (Cost of Debt)", 
             min_value=0.0, 
@@ -789,8 +798,15 @@ def main():
                 company_ticker = selected_company_ticker
                 company_name = selected_company_name
                 
-                # Calculate total revenue and PAT for storage
-                calculated_total_revenue = nsa * asp
+                # Calculate total revenue and PAT for storage with price increment factor
+                # Calculate weighted average selling price over the sales period
+                total_weighted_revenue = 0
+                for year_offset in range(sales_years):
+                    year_price = asp * (1 + price_increment_factor) ** year_offset
+                    year_revenue = (nsa / sales_years) * year_price  # Equal sales distribution
+                    total_weighted_revenue += year_revenue
+                
+                calculated_total_revenue = total_weighted_revenue
                 calculated_total_construction_cost = gfa * construction_cost_per_sqm  # Positive value for storage
                 calculated_total_land_cost = land_area * land_cost_per_sqm  # Positive value for storage
                 calculated_total_sga_cost = calculated_total_revenue * sga_percent
@@ -800,7 +816,12 @@ def main():
                 # Calculate RNAV using the same logic as display section
                 try:
                     # Use the same totals calculation as the display section
-                    display_total_revenue = nsa * asp
+                    total_weighted_revenue = 0
+                    for year_offset in range(sales_years):
+                        year_price = asp * (1 + price_increment_factor) ** year_offset
+                        year_revenue = (nsa / sales_years) * year_price  # Equal sales distribution
+                        total_weighted_revenue += year_revenue
+                    display_total_revenue = total_weighted_revenue
                     display_total_construction_cost = -gfa * construction_cost_per_sqm
                     display_total_land_cost = -land_area * land_cost_per_sqm
                     display_total_sga_cost = -display_total_revenue * sga_percent
@@ -825,15 +846,30 @@ def main():
                     )
                     
                     # Create tax expense schedule
-                    num_years = int(end_booking_year) - int(current_year) + 1
+                    num_years = int(end_booking_year) - int(project_start_year) + 1
                     tax_expense = []
-                    for year in range(int(current_year), int(end_booking_year) + 1):
+                    for year in range(int(project_start_year), int(end_booking_year) + 1):
                         year_data = df_pnl[df_pnl["Year"] == year]
                         if not year_data.empty and year_data["Type"].iloc[0] != "Summary":
                             tax_value = year_data["Tax Expense (20%)"].iloc[0]
                         else:
                             tax_value = 0.0
                         tax_expense.append(tax_value)
+
+                    # Verify all schedules have the same length
+                    schedules_info = {
+                        "selling_progress": len(selling_progress),
+                        "construction_payment": len(construction_payment), 
+                        "sga_payment": len(sga_payment),
+                        "tax_expense": len(tax_expense),
+                        "land_use_right_payment": len(land_use_right_payment),
+                    }
+                    st.write("**Schedule Lengths:**", schedules_info)
+                    # Ensure all schedules have the same length
+                    expected_length = num_years
+                    if not all(length == expected_length for length in schedules_info.values()):
+                        st.error(f"Schedule length mismatch! Expected: {expected_length}, Got: {schedules_info}")
+                        st.stop()
 
                     # Calculate RNAV (same as display section)
                     df_rnav = RNAV_Calculation(
@@ -886,6 +922,7 @@ def main():
                     'total_units': total_units,
                     'average_unit_size': average_unit_size,
                     'average_selling_price': asp,
+                    'price_increment_factor': price_increment_factor,
                     'gross_floor_area': gfa,
                     'land_area': land_area,
                     'construction_cost_per_sqm': construction_cost_per_sqm,
@@ -933,7 +970,12 @@ def main():
         st.sidebar.info("💾 MongoDB not available - Cannot save projects")
 
     # Calculate totals
-    total_revenue = nsa * asp
+    total_weighted_revenue = 0
+    for year_offset in range(sales_years):
+        year_price = asp * (1 + price_increment_factor) ** year_offset
+        year_revenue = (nsa / sales_years) * year_price  # Equal sales distribution
+        total_weighted_revenue += year_revenue
+    total_revenue = total_weighted_revenue
     total_construction_cost = -gfa * construction_cost_per_sqm
     total_land_cost = -land_area * land_cost_per_sqm
     total_sga_cost = -total_revenue * sga_percent
