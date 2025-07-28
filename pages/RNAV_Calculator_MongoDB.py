@@ -991,7 +991,7 @@ def main():
             ):
                 if confirm_delete:
                     # Perform the deletion
-                    with st.sidebar.spinner("Deleting project..."):
+                    with st.spinner("Deleting project..."):
                         delete_result = delete_project_from_mongodb(selected_company_ticker, project_name)
                         
                     if delete_result["success"]:
