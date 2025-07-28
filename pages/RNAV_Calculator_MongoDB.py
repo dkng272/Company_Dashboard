@@ -858,13 +858,13 @@ def main():
                         tax_expense.append(tax_value)
 
                     # Verify all schedules have the same length
-                    #schedules_info = {
-                    #    "selling_progress": len(selling_progress),
-                    #    "construction_payment": len(construction_payment), 
-                    #    "sga_payment": len(sga_payment),
-                    #    "tax_expense": len(tax_expense),
-                    #    "land_use_right_payment": len(land_use_right_payment),
-                    #}
+                    schedules_info = {
+                       "selling_progress": len(selling_progress),
+                       "construction_payment": len(construction_payment), 
+                       "sga_payment": len(sga_payment),
+                       "tax_expense": len(tax_expense),
+                       "land_use_right_payment": len(land_use_right_payment),
+                    }
                     #st.write("**Schedule Lengths:**", schedules_info)
                     # Ensure all schedules have the same length
                     expected_length = num_years
@@ -1088,13 +1088,13 @@ def main():
         tax_expense.append(tax_value)
     
     # Verify all schedules have the same length
-    #schedules_info = {
-    #    "selling_progress": len(selling_progress),
-    #    "construction_payment": len(construction_payment), 
-    #    "sga_payment": len(sga_payment),
-    #    "tax_expense": len(tax_expense),
-    #    "land_use_right_payment": len(land_use_right_payment),
-    #}
+    schedules_info = {
+       "selling_progress": len(selling_progress),
+       "construction_payment": len(construction_payment), 
+       "sga_payment": len(sga_payment),
+       "tax_expense": len(tax_expense),
+       "land_use_right_payment": len(land_use_right_payment),
+    }
     #st.write("**Schedule Lengths:**", schedules_info)
     # Ensure all schedules have the same length
     expected_length = num_years
