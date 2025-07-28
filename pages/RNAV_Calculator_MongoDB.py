@@ -79,7 +79,7 @@ st.set_page_config(
 )
 
 def main():
-    st.title("🧮 Real Estate RNAV Calculator - MongoDB Direct Edition 2PM")
+    st.title("🧮 Real Estate RNAV Calculator - MongoDB Direct Edition")
 
     # MongoDB connection status
     with st.sidebar:
