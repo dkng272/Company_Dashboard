@@ -858,14 +858,14 @@ def main():
                         tax_expense.append(tax_value)
 
                     # Verify all schedules have the same length
-                    schedules_info = {
-                        "selling_progress": len(selling_progress),
-                        "construction_payment": len(construction_payment), 
-                        "sga_payment": len(sga_payment),
-                        "tax_expense": len(tax_expense),
-                        "land_use_right_payment": len(land_use_right_payment),
-                    }
-                    st.write("**Schedule Lengths:**", schedules_info)
+                    #schedules_info = {
+                    #    "selling_progress": len(selling_progress),
+                    #    "construction_payment": len(construction_payment), 
+                    #    "sga_payment": len(sga_payment),
+                    #    "tax_expense": len(tax_expense),
+                    #    "land_use_right_payment": len(land_use_right_payment),
+                    #}
+                    #st.write("**Schedule Lengths:**", schedules_info)
                     # Ensure all schedules have the same length
                     expected_length = num_years
                     if not all(length == expected_length for length in schedules_info.values()):
@@ -906,14 +906,14 @@ def main():
                     rnav_value = None
                 
                 # Debug: Show what will be saved
-                st.sidebar.markdown("---")
-                st.sidebar.subheader("🔍 Debug: Data to Save")
-                st.sidebar.write(f"**Project Name:** {project_name}")
-                st.sidebar.write(f"**Company:** {company_ticker} - {company_name}")
-                st.sidebar.write(f"**RNAV Value:** {format_vnd_billions(rnav_value) if rnav_value else 'None'}")
-                st.sidebar.write(f"**Total Revenue:** {format_vnd_billions(calculated_total_revenue)}")
-                st.sidebar.write(f"**Total PAT:** {format_vnd_billions(calculated_total_PAT)}")
-                st.sidebar.write(f"**Location:** {location if location else 'Not specified'}")
+                #st.sidebar.markdown("---")
+                #st.sidebar.subheader("🔍 Debug: Data to Save")
+                #st.sidebar.write(f"**Project Name:** {project_name}")
+                #st.sidebar.write(f"**Company:** {company_ticker} - {company_name}")
+                #st.sidebar.write(f"**RNAV Value:** {format_vnd_billions(rnav_value) if rnav_value else 'None'}")
+                #st.sidebar.write(f"**Total Revenue:** {format_vnd_billions(calculated_total_revenue)}")
+                #st.sidebar.write(f"**Total PAT:** {format_vnd_billions(calculated_total_PAT)}")
+                #st.sidebar.write(f"**Location:** {location if location else 'Not specified'}")
                 
                 # Collect current project data including location, total revenue, and total PAT
                 current_project_data = {
@@ -1088,14 +1088,14 @@ def main():
         tax_expense.append(tax_value)
     
     # Verify all schedules have the same length
-    schedules_info = {
-        "selling_progress": len(selling_progress),
-        "construction_payment": len(construction_payment), 
-        "sga_payment": len(sga_payment),
-        "tax_expense": len(tax_expense),
-        "land_use_right_payment": len(land_use_right_payment),
-    }
-    st.write("**Schedule Lengths:**", schedules_info)
+    #schedules_info = {
+    #    "selling_progress": len(selling_progress),
+    #    "construction_payment": len(construction_payment), 
+    #    "sga_payment": len(sga_payment),
+    #    "tax_expense": len(tax_expense),
+    #    "land_use_right_payment": len(land_use_right_payment),
+    #}
+    #st.write("**Schedule Lengths:**", schedules_info)
     # Ensure all schedules have the same length
     expected_length = num_years
     if not all(length == expected_length for length in schedules_info.values()):
@@ -1109,6 +1109,8 @@ def main():
     # Create two parallel columns for P&L Schedule and RNAV Calculation
     pnl_col, rnav_col = st.columns(2)
     
+    st.markdown("---")
+
     with pnl_col:
         st.header("P&L Schedule")
         # Create a copy and modify year labels to avoid duplicates
