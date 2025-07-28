@@ -256,4 +256,53 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
     except Exception as e:
         return {"success": False, "message": f"Error saving to MongoDB: {str(e)}"}
 
+def delete_project_from_mongodb(company_ticker, project_name):
+    """Delete a project from MongoDB database"""
+    try:
+        client = init_mongodb_connection()
+        if client is None:
+            return {"success": False, "message": "Failed to connect to MongoDB"}
+        
+        # Get database and collection
+        db_name = 'VietnamStocks'
+        collection_name = 'RealEstateProjects'
+        
+        db = client.get_database(db_name)
+        collection = db.get_collection(collection_name)
+        
+        # Check if project exists before deletion
+        existing_project = collection.find_one({
+            "project_name": project_name,
+            "company_ticker": company_ticker
+        })
+        
+        if not existing_project:
+            return {
+                "success": False, 
+                "message": f"Project '{project_name}' not found for company '{company_ticker}'"
+            }
+        
+        # Delete the project
+        result = collection.delete_one({
+            "project_name": project_name,
+            "company_ticker": company_ticker
+        })
+        
+        if result.deleted_count == 1:
+            return {
+                "success": True, 
+                "message": f"Project '{project_name}' successfully deleted from company '{company_ticker}'"
+            }
+        else:
+            return {
+                "success": False, 
+                "message": f"Failed to delete project '{project_name}' - no documents were deleted"
+            }
+        
+    except Exception as e:
+        return {
+            "success": False, 
+            "message": f"Error deleting project from MongoDB: {str(e)}"
+        }
+
 # %%

@@ -36,7 +36,8 @@ from utils.mongodb_utils import (
     get_projects_for_company, 
     get_project_data,
     save_project_to_mongodb,  # Add this missing import
-    get_companies_list       # Add this missing import
+    get_companies_list,       # Add this missing import
+    delete_project_from_mongodb  # Add delete function import
 )
 
 # Import RNAV utilities
@@ -966,6 +967,52 @@ def main():
                     st.rerun()
                 else:
                     st.sidebar.error(save_result["message"])
+        
+        # Add Delete Project section
+        if selected_project_data and project_name and selected_company_ticker != 'MANUAL':
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🗑️ Delete Project")
+            
+            st.sidebar.warning(f"⚠️ **Delete existing project:** {project_name}")
+            st.sidebar.error("🚨 **This action cannot be undone!**")
+            
+            # Add confirmation checkbox
+            confirm_delete = st.sidebar.checkbox(
+                f"I confirm I want to permanently delete '{project_name}' from {selected_company_ticker}",
+                key="confirm_delete"
+            )
+            
+            # Delete button (only enabled if confirmed)
+            if st.sidebar.button(
+                "🗑️ Delete Project from MongoDB", 
+                type="secondary",
+                disabled=not confirm_delete,
+                help="Permanently delete this project from the database"
+            ):
+                if confirm_delete:
+                    # Perform the deletion
+                    with st.sidebar.spinner("Deleting project..."):
+                        delete_result = delete_project_from_mongodb(selected_company_ticker, project_name)
+                        
+                    if delete_result["success"]:
+                        st.sidebar.success(f"✅ {delete_result['message']}")
+                        st.sidebar.info(f"🗑️ Project '{project_name}' has been permanently deleted from {selected_company_ticker}")
+                        
+                        # Clear the session state to prevent confusion
+                        if 'preload_project_data' in st.session_state:
+                            del st.session_state['preload_project_data']
+                        if 'preload_project_name' in st.session_state:
+                            del st.session_state['preload_project_name']
+                        
+                        # Refresh the page to show updated project list
+                        st.rerun()
+                    else:
+                        st.sidebar.error(f"❌ {delete_result['message']}")
+                else:
+                    st.sidebar.error("❌ Please confirm deletion by checking the box above")
+            
+            if not confirm_delete:
+                st.sidebar.caption("💡 Check the confirmation box above to enable the delete button")
     else:
         st.sidebar.info("💾 MongoDB not available - Cannot save projects")
 
