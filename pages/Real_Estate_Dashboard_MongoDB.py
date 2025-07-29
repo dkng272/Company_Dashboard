@@ -432,26 +432,42 @@ def main():
             else:
                 st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
                 
-                # Debug: Show available columns
+                # Debug: Show available columns and KeyCodes
                 st.write("**Available Financial Data Columns:**")
                 st.write(list(financials_df.columns))
                 
-                # Get financials for the selected company and quarter
-                def safe_get_value(df, column_name, default=0):
-                    """Safely get value from dataframe column"""
+                if 'KeyCode' in financials_df.columns:
+                    st.write("**Available KeyCodes:**")
+                    st.write(sorted(financials_df['KeyCode'].unique().tolist()))
+                
+                # Function to get value by KeyCode
+                def get_value_by_keycode(df, keycode, default=0):
+                    """Extract value for a specific KeyCode"""
                     try:
-                        if column_name in df.columns and len(df) > 0:
-                            value = df[column_name].iloc[0]
-                            return float(value) if pd.notna(value) else default
+                        if 'KeyCode' in df.columns and 'Value' in df.columns:
+                            filtered = df[df['KeyCode'] == keycode]
+                            if not filtered.empty:
+                                value = filtered['Value'].iloc[0]
+                                return float(value) if pd.notna(value) else default
                         return default
-                    except:
+                    except Exception as e:
+                        st.write(f"Error extracting {keycode}: {e}")
                         return default
                 
-                cash_equivalent = safe_get_value(financials_df, 'Cash_Equivalent', 0)
-                st_investment = safe_get_value(financials_df, 'Short_Investment', 0)
-                st_debt = safe_get_value(financials_df, 'ST_Debt', 0)
-                lt_debt = safe_get_value(financials_df, 'LT_Debt', 0)
-                outstanding_shares = safe_get_value(financials_df, 'OS', 0)
+                # Extract financial metrics using KeyCode
+                cash_equivalent = get_value_by_keycode(financials_df, 'Cash_Equivalent', 0)
+                st_investment = get_value_by_keycode(financials_df, 'Short_Investment', 0)
+                st_debt = get_value_by_keycode(financials_df, 'ST_Debt', 0)
+                lt_debt = get_value_by_keycode(financials_df, 'LT_Debt', 0)
+                outstanding_shares = get_value_by_keycode(financials_df, 'OS', 0)
+                
+                # Debug: Show extracted values
+                st.write("**Extracted Values:**")
+                st.write(f"Cash_Equivalent: {cash_equivalent}")
+                st.write(f"Short_Investment: {st_investment}")
+                st.write(f"ST_Debt: {st_debt}")
+                st.write(f"LT_Debt: {lt_debt}")
+                st.write(f"OS: {outstanding_shares}")
                 
                 # Calculate net cash (positive means net cash, negative means net debt)
                 net_cash = cash_equivalent + st_investment - st_debt - lt_debt
