@@ -443,7 +443,7 @@ def main():
                 val_col1, val_col2 = st.columns(2)
                 
                 with val_col1:
-                    st.metric("Total Project RNAV", format_vnd_display(enterprise_value))
+                    st.metric("Total Projects RNAV", format_vnd_display(enterprise_value))
                     st.metric("Equity Value", format_vnd_display(equity_value))
                 
                 with val_col2:
