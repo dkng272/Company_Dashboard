@@ -174,8 +174,10 @@ def get_financials_for_company(company_ticker, selected_quarter):
         db = client.get_database(db_name)
         collection = db.get_collection(collection_name)
         
-        # Query financials for specific company ticker
-        financials_cursor = collection.find({"Ticker": company_ticker})
+        # Query financials for specific company ticker and Type = "P"
+        query = {"Ticker": company_ticker, "Type": "P"}
+        financials_cursor = collection.find(query)
+        
         financials_list = list(financials_cursor)
         
         if not financials_list:

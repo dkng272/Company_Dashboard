@@ -422,22 +422,30 @@ def main():
         
         financials_df = get_financials_for_company(selected_ticker, selected_quarter)
         
-        st.write("### 📊 Financial Overview")
+        st.write("### 📊 Financial Overview & valuation")
         if financials_df.empty:
             st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
         else:
+            # get financials for the selected company and quarter
+            cash_equivalent = financials_df['Cash_Equivalent'].iloc[0] if 'Cash_Equivalent' in financials_df.columns else 0
+            st_investment = financials_df['Short_Investment'].iloc[0] if 'Short_Investment' in financials_df.columns else 0
+            st_debt = financials_df['ST_Debt'].iloc[0] if 'ST_Debt' in financials_df.columns else 0
+            lt_debt = financials_df['LT_Debt'].iloc[0] if 'LT_Debt' in financials_df.columns else 0
+            outstanding_shares = financials_df['OS'].iloc[0] if 'OS' in financials_df.columns else 0
+            
+            net_debt = cash_equivalent + st_investment - st_debt - lt_debt
+
             # Display financial data
-            st.dataframe(
-                financials_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Cash_Equivalent": st.column_config.TextColumn("Cash & Cash Equivalents (VND)", width="medium"),
-                    "Short_Investment": st.column_config.TextColumn("Short-Term Investments (VND)", width="medium"),
-                    "ST_debt": st.column_config.TextColumn("Short Term Debts (VND)", width="medium"),
-                    "LT_Debt": st.column_config.TextColumn("Long Term Debts (VND)", width="medium")
-                }
-            )
+            st.write("#### Financial Data")
+            st.write(f"**Cash and Cash Equivalents:** {cash_equivalent}")
+            st.write(f"**Short Term Investments:** {st_investment}")
+            st.write(f"**Short Term Debt:** {st_debt}")
+            st.write(f"**Long Term Debt:** {lt_debt}")
+            st.write(f"**Net Debt:** {net_debt}")
+            st.write(f"**Equity Value:** {total_rnav + net_debt}")
+            st.write(f"**Outstanding Shares:** {outstanding_shares}")
+            st.write(f"**Estimated RNAV per Share:** {(total_rnav + net_debt) / outstanding_shares if outstanding_shares > 0 else 'N/A'}")
+        
         st.markdown("---")
 
         # Revenue Summary Table
@@ -624,34 +632,6 @@ def main():
                 st.info("No valid revenue booking timeline data available for revenue summary.")
         
         st.markdown("---")
-        # Add Financial Information Section
-
-
-        st.subheader("📊 Financial Information")
-        
-        # Get financial data for the selected company
-        try:
-            financials_df = get_financials_for_company(selected_ticker)
-            
-            if not financials_df.empty:
-                # Display financial data
-                latest_year = financials_df.iloc[0]
-                        
-                current_cash = latest_year.get('Cash_Equivalent', 0)
-                st.metric("Current Cash", format_vnd_display(current_cash))
-                  
-                st_debt = latest_year.get('st_debt', 0)
-                st.metric("Short-term Debt", format_vnd_display(st_debt))
-                lt_debt = latest_year.get('lt_debt', 0)
-                st.metric("Long-term Debt", format_vnd_display(lt_debt))
-                st_investment = latest_year.get('st_investment', 0)
-                st.metric("Short-term Investment", format_vnd_display(st_investment))
-            else:
-                st.info(f"No financial data available for {selected_ticker}")
-                
-        except Exception as e:
-            st.error(f"Error loading financial data: {str(e)}")
-
 
         # Stacked Column Chart for Revenue by Project and Year
         st.subheader("📊 Revenue by Year - Project Contribution Breakdown")
