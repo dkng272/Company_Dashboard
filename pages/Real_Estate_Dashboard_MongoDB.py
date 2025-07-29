@@ -363,7 +363,7 @@ def main():
         st.markdown("---")
 
         # Get financial data for the selected company and quarter
-        #st.write("### 📊 Financial Overview & Valuation")
+        # st.write("### 📊 Financial Overview & Valuation")
         
         try:
             financials_df = get_financials_for_company(selected_ticker, selected_quarter)
