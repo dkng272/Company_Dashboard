@@ -363,7 +363,7 @@ def main():
         st.markdown("---")
 
         # Get financial data for the selected company and quarter
-        st.write("### 📊 Financial Overview & Valuation")
+        #st.write("### 📊 Financial Overview & Valuation")
         
         try:
             financials_df = get_financials_for_company(selected_ticker, selected_quarter)
@@ -372,7 +372,7 @@ def main():
                 st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
                 st.info("Available quarters might be different. Please check the data source.")
             else:
-                st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
+                # st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
                 
                 # Debug: Show available columns and KeyCodes
                 # st.write("**Available Financial Data Columns:**")
@@ -434,9 +434,9 @@ def main():
                 # with col3:
                 #     st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
                 #     st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
-                
-                st.markdown("---")
-                
+
+                # st.markdown("---")
+
                 # Valuation summary
                 st.write("#### Valuation Summary")
                 
