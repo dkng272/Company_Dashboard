@@ -436,16 +436,16 @@ def main():
                 st.write("**Available Financial Data Columns:**")
                 st.write(list(financials_df.columns))
                 
-                if 'KeyCode' in financials_df.columns:
+                if 'Keycode' in financials_df.columns:
                     st.write("**Available KeyCodes:**")
-                    st.write(sorted(financials_df['KeyCode'].unique().tolist()))
+                    st.write(sorted(financials_df['Keycode'].unique().tolist()))
                 
                 # Function to get value by KeyCode
                 def get_value_by_keycode(df, keycode, default=0):
-                    """Extract value for a specific KeyCode"""
+                    """Extract value for a specific Keycode"""
                     try:
-                        if 'KeyCode' in df.columns and 'Value' in df.columns:
-                            filtered = df[df['KeyCode'] == keycode]
+                        if 'Keycode' in df.columns and 'Value' in df.columns:
+                            filtered = df[df['Keycode'] == keycode]
                             if not filtered.empty:
                                 value = filtered['Value'].iloc[0]
                                 return float(value) if pd.notna(value) else default
