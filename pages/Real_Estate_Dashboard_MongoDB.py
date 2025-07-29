@@ -361,7 +361,106 @@ def main():
             st.metric("Total Portfolio RNAV", format_vnd_display(total_rnav))
         
         st.markdown("---")
+
+        # Get financial data for the selected company and quarter
+        st.write("### 📊 Financial Overview & Valuation")
         
+        try:
+            financials_df = get_financials_for_company(selected_ticker, selected_quarter)
+            
+            if financials_df.empty:
+                st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
+                st.info("Available quarters might be different. Please check the data source.")
+            else:
+                st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
+                
+                # Debug: Show available columns and KeyCodes
+                # st.write("**Available Financial Data Columns:**")
+                # st.write(list(financials_df.columns))
+                
+                # if 'Keycode' in financials_df.columns:
+                #     st.write("**Available KeyCodes:**")
+                #     st.write(sorted(financials_df['Keycode'].unique().tolist()))
+                
+                # Function to get value by KeyCode
+                def get_value_by_keycode(df, keycode, default=0):
+                    """Extract value for a specific Keycode"""
+                    try:
+                        if 'Keycode' in df.columns and 'Value' in df.columns:
+                            filtered = df[df['Keycode'] == keycode]
+                            if not filtered.empty:
+                                value = filtered['Value'].iloc[0]
+                                return float(value) if pd.notna(value) else default
+                        return default
+                    except Exception as e:
+                        st.write(f"Error extracting {keycode}: {e}")
+                        return default
+                
+                # Extract financial metrics using KeyCode
+                cash_equivalent = get_value_by_keycode(financials_df, 'Cash_Equivalent', 0)
+                st_investment = get_value_by_keycode(financials_df, 'Short_Investment', 0)
+                st_debt = get_value_by_keycode(financials_df, 'ST_Debt', 0)
+                lt_debt = get_value_by_keycode(financials_df, 'LT_Debt', 0)
+                outstanding_shares = get_value_by_keycode(financials_df, 'OS', 0)
+                
+                # Debug: Show extracted values
+                # st.write("**Extracted Values:**")
+                # st.write(f"Cash_Equivalent: {cash_equivalent}")
+                # st.write(f"Short_Investment: {st_investment}")
+                # st.write(f"ST_Debt: {st_debt}")
+                # st.write(f"LT_Debt: {lt_debt}")
+                # st.write(f"OS: {outstanding_shares}")
+                
+                # Calculate net cash (positive means net cash, negative means net debt)
+                net_cash = cash_equivalent + st_investment - st_debt - lt_debt
+                
+                # Calculate enterprise value and equity value
+                enterprise_value = total_rnav  # RNAV represents enterprise value
+                equity_value = enterprise_value + net_cash  # Add net cash to get equity value
+                
+                # Display financial data in formatted columns
+                st.write("#### Financial Data")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Cash & Cash Equivalents", format_vnd_display(cash_equivalent))
+                    st.metric("Short Term Investments", format_vnd_display(st_investment))
+                
+                with col2:
+                    st.metric("Short Term Debt", format_vnd_display(st_debt))
+                    st.metric("Long Term Debt", format_vnd_display(lt_debt))
+                
+                with col3:
+                    st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
+                    st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
+                
+                st.markdown("---")
+                
+                # Valuation summary
+                st.write("#### Valuation Summary")
+                
+                val_col1, val_col2 = st.columns(2)
+                
+                with val_col1:
+                    st.metric("Enterprise Value (RNAV)", format_vnd_display(enterprise_value))
+                    st.metric("Equity Value", format_vnd_display(equity_value))
+                
+                with val_col2:
+                    if outstanding_shares > 0:
+                        rnav_per_share = equity_value / (outstanding_shares)  # Convert shares from millions
+                        st.metric("RNAV per Share (VND)", f"{rnav_per_share:,.0f}")
+                    else:
+                        st.metric("RNAV per Share", "N/A")
+                
+        except Exception as e:
+            st.error(f"❌ Error loading financial data: {str(e)}")
+            st.write("**Debug Info:**")
+            st.write(f"Selected Ticker: {selected_ticker}")
+            st.write(f"Selected Quarter: {selected_quarter}")
+        
+        st.markdown("---")
+
         # Projects table with RNAV
         st.subheader("📋 Project Portfolio with RNAV")
         
@@ -417,105 +516,6 @@ def main():
             },
             disabled=True
         )
-        
-        st.markdown("---")
-        
-        # Get financial data for the selected company and quarter
-        st.write("### 📊 Financial Overview & Valuation")
-        
-        try:
-            financials_df = get_financials_for_company(selected_ticker, selected_quarter)
-            
-            if financials_df.empty:
-                st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
-                st.info("Available quarters might be different. Please check the data source.")
-            else:
-                st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
-                
-                # Debug: Show available columns and KeyCodes
-                st.write("**Available Financial Data Columns:**")
-                st.write(list(financials_df.columns))
-                
-                if 'Keycode' in financials_df.columns:
-                    st.write("**Available KeyCodes:**")
-                    st.write(sorted(financials_df['Keycode'].unique().tolist()))
-                
-                # Function to get value by KeyCode
-                def get_value_by_keycode(df, keycode, default=0):
-                    """Extract value for a specific Keycode"""
-                    try:
-                        if 'Keycode' in df.columns and 'Value' in df.columns:
-                            filtered = df[df['Keycode'] == keycode]
-                            if not filtered.empty:
-                                value = filtered['Value'].iloc[0]
-                                return float(value) if pd.notna(value) else default
-                        return default
-                    except Exception as e:
-                        st.write(f"Error extracting {keycode}: {e}")
-                        return default
-                
-                # Extract financial metrics using KeyCode
-                cash_equivalent = get_value_by_keycode(financials_df, 'Cash_Equivalent', 0)
-                st_investment = get_value_by_keycode(financials_df, 'Short_Investment', 0)
-                st_debt = get_value_by_keycode(financials_df, 'ST_Debt', 0)
-                lt_debt = get_value_by_keycode(financials_df, 'LT_Debt', 0)
-                outstanding_shares = get_value_by_keycode(financials_df, 'OS', 0)
-                
-                # Debug: Show extracted values
-                st.write("**Extracted Values:**")
-                st.write(f"Cash_Equivalent: {cash_equivalent}")
-                st.write(f"Short_Investment: {st_investment}")
-                st.write(f"ST_Debt: {st_debt}")
-                st.write(f"LT_Debt: {lt_debt}")
-                st.write(f"OS: {outstanding_shares}")
-                
-                # Calculate net cash (positive means net cash, negative means net debt)
-                net_cash = cash_equivalent + st_investment - st_debt - lt_debt
-                
-                # Calculate enterprise value and equity value
-                enterprise_value = total_rnav  # RNAV represents enterprise value
-                equity_value = enterprise_value + net_cash  # Add net cash to get equity value
-                
-                # Display financial data in formatted columns
-                st.write("#### Financial Data")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Cash & Cash Equivalents", format_vnd_display(cash_equivalent))
-                    st.metric("Short Term Investments", format_vnd_display(st_investment))
-                
-                with col2:
-                    st.metric("Short Term Debt", format_vnd_display(st_debt))
-                    st.metric("Long Term Debt", format_vnd_display(lt_debt))
-                
-                with col3:
-                    st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
-                    st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
-                
-                st.markdown("---")
-                
-                # Valuation summary
-                st.write("#### Valuation Summary")
-                
-                val_col1, val_col2 = st.columns(2)
-                
-                with val_col1:
-                    st.metric("Enterprise Value (RNAV)", format_vnd_display(enterprise_value))
-                    st.metric("Equity Value", format_vnd_display(equity_value))
-                
-                with val_col2:
-                    if outstanding_shares > 0:
-                        rnav_per_share = equity_value / (outstanding_shares)  # Convert shares from millions
-                        st.metric("RNAV per Share (VND)", f"{rnav_per_share:,.0f}")
-                    else:
-                        st.metric("RNAV per Share", "N/A")
-                
-        except Exception as e:
-            st.error(f"❌ Error loading financial data: {str(e)}")
-            st.write("**Debug Info:**")
-            st.write(f"Selected Ticker: {selected_ticker}")
-            st.write(f"Selected Quarter: {selected_quarter}")
         
         st.markdown("---")
         
