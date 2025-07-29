@@ -506,7 +506,7 @@ def main():
                 
                 with val_col2:
                     if outstanding_shares > 0:
-                        rnav_per_share = equity_value / (outstanding_shares * 1_000_000)  # Convert shares from millions
+                        rnav_per_share = equity_value / (outstanding_shares)  # Convert shares from millions
                         st.metric("RNAV per Share (VND)", f"{rnav_per_share:,.0f}")
                     else:
                         st.metric("RNAV per Share", "N/A")
