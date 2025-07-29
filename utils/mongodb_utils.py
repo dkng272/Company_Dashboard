@@ -159,6 +159,48 @@ def get_projects_for_company(company_ticker):
     
     return sorted(company_projects['project_name'].tolist())
 
+def get_financials_for_company(company_ticker, selected_quarter):
+    """Get financial data for a specific company from CompanyFinancials collection"""
+    try:
+        client = init_mongodb_connection()
+        if client is None:
+            return pd.DataFrame()
+        
+        # Get database and collection names
+        db_name = 'VietnamStocks'
+        collection_name = 'CompanyFinancials'
+        
+        # Get database and collection
+        db = client.get_database(db_name)
+        collection = db.get_collection(collection_name)
+        
+        # Query financials for specific company ticker
+        financials_cursor = collection.find({"Ticker": company_ticker})
+        financials_list = list(financials_cursor)
+        
+        if not financials_list:
+            return pd.DataFrame()
+        
+        # Convert to DataFrame
+        df_financials = pd.DataFrame(financials_list)
+        
+        # Remove MongoDB ObjectId if present
+        if '_id' in df_financials.columns:
+            df_financials = df_financials.drop('_id', axis=1)
+        
+        # Handle date conversion for Date column if it exists
+        # Date format is like "2025Q1", "2025Q2", etc.
+        
+        # Filter by selected quarter if specified
+        if selected_quarter and selected_quarter != "All" and 'Date' in df_financials.columns:
+            df_financials = df_financials[df_financials['Date'] == selected_quarter]
+        
+        return df_financials
+        
+    except Exception as e:
+        st.error(f"❌ Error loading financial data for {company_ticker} from MongoDB: {str(e)}")
+        return pd.DataFrame()
+
 def get_project_data(company_ticker, project_name):
     """Get specific project data"""
     df_projects = load_projects_data()

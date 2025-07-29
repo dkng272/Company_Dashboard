@@ -5,9 +5,22 @@ from pymongo import MongoClient
 from datetime import datetime
 import certifi
 from dotenv import load_dotenv
+import sys
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Add the parent directory to sys.path to import from utils
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Import MongoDB utilities
+from utils.mongodb_utils import (
+    get_financials_for_company
+)
+
 
 # Page configuration
 st.set_page_config(
@@ -234,6 +247,18 @@ def main():
         index=0
     )
     
+    # Add Quarterly Filing dropdown
+    st.sidebar.header("📅 Reporting Period")
+    quarterly_options = ["2025Q1", "2024Q4", "2024Q3", "2024Q2", "2024Q1"]
+    selected_quarter = st.sidebar.selectbox(
+        "Quarterly Filing:",
+        options=quarterly_options,
+        index=0  # Default to 2025Q1
+    )
+    
+    # Display selected quarter info
+    st.sidebar.info(f"📊 Selected Period: **{selected_quarter}**")
+    
     if selected_company == "Select a company...":
         # Show overview of all companies
         st.header("📊 Company Overview")
@@ -395,6 +420,26 @@ def main():
         
         st.markdown("---")
         
+        financials_df = get_financials_for_company(selected_ticker, selected_quarter)
+        
+        st.write("### 📊 Financial Overview")
+        if financials_df.empty:
+            st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
+        else:
+            # Display financial data
+            st.dataframe(
+                financials_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Cash_Equivalent": st.column_config.TextColumn("Cash & Cash Equivalents (VND)", width="medium"),
+                    "Short_Investment": st.column_config.TextColumn("Short-Term Investments (VND)", width="medium"),
+                    "ST_debt": st.column_config.TextColumn("Short Term Debts (VND)", width="medium"),
+                    "LT_Debt": st.column_config.TextColumn("Long Term Debts (VND)", width="medium")
+                }
+            )
+        st.markdown("---")
+
         # Revenue Summary Table
         st.subheader("📈 Revenue Summary by Year")
         
@@ -579,7 +624,35 @@ def main():
                 st.info("No valid revenue booking timeline data available for revenue summary.")
         
         st.markdown("---")
+        # Add Financial Information Section
+
+
+        st.subheader("📊 Financial Information")
         
+        # Get financial data for the selected company
+        try:
+            financials_df = get_financials_for_company(selected_ticker)
+            
+            if not financials_df.empty:
+                # Display financial data
+                latest_year = financials_df.iloc[0]
+                        
+                current_cash = latest_year.get('Cash_Equivalent', 0)
+                st.metric("Current Cash", format_vnd_display(current_cash))
+                  
+                st_debt = latest_year.get('st_debt', 0)
+                st.metric("Short-term Debt", format_vnd_display(st_debt))
+                lt_debt = latest_year.get('lt_debt', 0)
+                st.metric("Long-term Debt", format_vnd_display(lt_debt))
+                st_investment = latest_year.get('st_investment', 0)
+                st.metric("Short-term Investment", format_vnd_display(st_investment))
+            else:
+                st.info(f"No financial data available for {selected_ticker}")
+                
+        except Exception as e:
+            st.error(f"Error loading financial data: {str(e)}")
+
+
         # Stacked Column Chart for Revenue by Project and Year
         st.subheader("📊 Revenue by Year - Project Contribution Breakdown")
         
