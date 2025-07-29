@@ -420,34 +420,89 @@ def main():
         
         st.markdown("---")
         
-        financials_df = get_financials_for_company(selected_ticker, selected_quarter)
+        # Get financial data for the selected company and quarter
+        st.write("### 📊 Financial Overview & Valuation")
         
-        st.write("### 📊 Financial Overview & valuation")
-        if financials_df.empty:
-            st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
-        else:
-            # get financials for the selected company and quarter
-            cash_equivalent = financials_df['Cash_Equivalent'].iloc[0] if 'Cash_Equivalent' in financials_df.columns else 0
-            st_investment = financials_df['Short_Investment'].iloc[0] if 'Short_Investment' in financials_df.columns else 0
-            st_debt = financials_df['ST_Debt'].iloc[0] if 'ST_Debt' in financials_df.columns else 0
-            lt_debt = financials_df['LT_Debt'].iloc[0] if 'LT_Debt' in financials_df.columns else 0
-            outstanding_shares = financials_df['OS'].iloc[0] if 'OS' in financials_df.columns else 0
+        try:
+            financials_df = get_financials_for_company(selected_ticker, selected_quarter)
             
-            net_debt = cash_equivalent + st_investment - st_debt - lt_debt
-
-            # Display financial data
-            st.write("#### Financial Data")
-            st.write(f"**Cash and Cash Equivalents:** {cash_equivalent}")
-            st.write(f"**Short Term Investments:** {st_investment}")
-            st.write(f"**Short Term Debt:** {st_debt}")
-            st.write(f"**Long Term Debt:** {lt_debt}")
-            st.write(f"**Net Debt:** {net_debt}")
-            st.write(f"**Equity Value:** {total_rnav + net_debt}")
-            st.write(f"**Outstanding Shares:** {outstanding_shares}")
-            st.write(f"**Estimated RNAV per Share:** {(total_rnav + net_debt) / outstanding_shares if outstanding_shares > 0 else 'N/A'}")
+            if financials_df.empty:
+                st.warning(f"No financial data available for {selected_ticker} in {selected_quarter}.")
+                st.info("Available quarters might be different. Please check the data source.")
+            else:
+                st.success(f"✅ Financial data loaded for {selected_ticker} - {selected_quarter}")
+                
+                # Debug: Show available columns
+                st.write("**Available Financial Data Columns:**")
+                st.write(list(financials_df.columns))
+                
+                # Get financials for the selected company and quarter
+                def safe_get_value(df, column_name, default=0):
+                    """Safely get value from dataframe column"""
+                    try:
+                        if column_name in df.columns and len(df) > 0:
+                            value = df[column_name].iloc[0]
+                            return float(value) if pd.notna(value) else default
+                        return default
+                    except:
+                        return default
+                
+                cash_equivalent = safe_get_value(financials_df, 'Cash_Equivalent', 0)
+                st_investment = safe_get_value(financials_df, 'Short_Investment', 0)
+                st_debt = safe_get_value(financials_df, 'ST_Debt', 0)
+                lt_debt = safe_get_value(financials_df, 'LT_Debt', 0)
+                outstanding_shares = safe_get_value(financials_df, 'OS', 0)
+                
+                # Calculate net cash (positive means net cash, negative means net debt)
+                net_cash = cash_equivalent + st_investment - st_debt - lt_debt
+                
+                # Calculate enterprise value and equity value
+                enterprise_value = total_rnav  # RNAV represents enterprise value
+                equity_value = enterprise_value + net_cash  # Add net cash to get equity value
+                
+                # Display financial data in formatted columns
+                st.write("#### Financial Data")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Cash & Cash Equivalents", format_vnd_display(cash_equivalent))
+                    st.metric("Short Term Investments", format_vnd_display(st_investment))
+                
+                with col2:
+                    st.metric("Short Term Debt", format_vnd_display(st_debt))
+                    st.metric("Long Term Debt", format_vnd_display(lt_debt))
+                
+                with col3:
+                    st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
+                    st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
+                
+                st.markdown("---")
+                
+                # Valuation summary
+                st.write("#### Valuation Summary")
+                
+                val_col1, val_col2 = st.columns(2)
+                
+                with val_col1:
+                    st.metric("Enterprise Value (RNAV)", format_vnd_display(enterprise_value))
+                    st.metric("Equity Value", format_vnd_display(equity_value))
+                
+                with val_col2:
+                    if outstanding_shares > 0:
+                        rnav_per_share = equity_value / (outstanding_shares * 1_000_000)  # Convert shares from millions
+                        st.metric("RNAV per Share (VND)", f"{rnav_per_share:,.0f}")
+                    else:
+                        st.metric("RNAV per Share", "N/A")
+                
+        except Exception as e:
+            st.error(f"❌ Error loading financial data: {str(e)}")
+            st.write("**Debug Info:**")
+            st.write(f"Selected Ticker: {selected_ticker}")
+            st.write(f"Selected Quarter: {selected_quarter}")
         
         st.markdown("---")
-
+        
         # Revenue Summary Table
         st.subheader("📈 Revenue Summary by Year")
         
