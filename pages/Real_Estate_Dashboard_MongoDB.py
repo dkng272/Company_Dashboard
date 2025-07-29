@@ -419,21 +419,21 @@ def main():
                 equity_value = enterprise_value + net_cash  # Add net cash to get equity value
                 
                 # Display financial data in formatted columns
-                st.write("#### Financial Data")
+                # st.write("#### Financial Data")
                 
-                col1, col2, col3 = st.columns(3)
+                # col1, col2, col3 = st.columns(3)
                 
-                with col1:
-                    st.metric("Cash & Cash Equivalents", format_vnd_display(cash_equivalent))
-                    st.metric("Short Term Investments", format_vnd_display(st_investment))
+                # with col1:
+                #     st.metric("Cash & Cash Equivalents", format_vnd_display(cash_equivalent))
+                #     st.metric("Short Term Investments", format_vnd_display(st_investment))
                 
-                with col2:
-                    st.metric("Short Term Debt", format_vnd_display(st_debt))
-                    st.metric("Long Term Debt", format_vnd_display(lt_debt))
+                # with col2:
+                #     st.metric("Short Term Debt", format_vnd_display(st_debt))
+                #     st.metric("Long Term Debt", format_vnd_display(lt_debt))
                 
-                with col3:
-                    st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
-                    st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
+                # with col3:
+                #     st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
+                #     st.metric("Outstanding Shares (M)", f"{outstanding_shares:,.0f}" if outstanding_shares > 0 else "N/A")
                 
                 st.markdown("---")
                 
@@ -447,6 +447,7 @@ def main():
                     st.metric("Equity Value", format_vnd_display(equity_value))
                 
                 with val_col2:
+                    st.metric("Net Cash/(Debt)", format_vnd_display(net_cash))
                     if outstanding_shares > 0:
                         rnav_per_share = equity_value / (outstanding_shares)  # Convert shares from millions
                         st.metric("RNAV per Share (VND)", f"{rnav_per_share:,.0f}")
