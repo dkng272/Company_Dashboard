@@ -96,13 +96,13 @@ def create_FA_plots(df, ticker: str):
     df_temp = df.copy()
     df_ticker = df_temp[(df_temp.TICKER == ticker) & (df_temp.KEYCODE.isin(IS))]
     df_ticker = df_ticker.pivot(index='DATE', columns='KEYCODE', values='VALUE') / 1e9
-    plot_cols = [col for col in ['Net_Revenue', 'Gross_Profit', 'EBIT', 'NPATMI'] if col in df_ticker.columns]
+    plot_cols = [col for col in ['Net_Revenue', 'Gross_Profit', 'EBIT', 'EBITDA', 'NPATMI'] if col in df_ticker.columns]
     if not plot_cols:
         return go.Figure()
     ma = df_ticker[plot_cols].rolling(window=4, min_periods=1).mean()
     subplot_titles = [col.replace('_', ' ') for col in plot_cols]
     rows = (len(plot_cols) + 1) // 2
-    colors = ['royalblue', 'darkorange', 'green', 'gray']
+    colors = ['royalblue', 'darkorange', 'green', 'red' ,'gray']
     return create_subplot_figure(df_ticker, plot_cols, ma, subplot_titles, "bn", "Income Statement Overview - " + ticker, rows, colors)
 
 def create_gr_plots(df, ticker: str):
