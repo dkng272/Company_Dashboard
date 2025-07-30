@@ -19,7 +19,7 @@ def load_data():
     return df, val, mcap, bank, names
 
 df, val, mcap, bank, names = load_data()
-name_dict = names.set_index('TICKER')['NAME'].to_dict()
+name_dict = names.set_index('Ticker')['en_OrganShortName'].to_dict()
 
 IS = ['Net_Revenue','Gross_Profit', 'EBIT', 'EBITDA',  'NPATMI']
 MARGIN = ['Gross_Margin', 'EBIT_Margin', 'EBITDA_Margin','NPAT_Margin']
@@ -236,7 +236,7 @@ start_year = st.sidebar.selectbox("Select Start Year", years, index=4) #defaulte
 
 # Boxes to display most recent P/E, P/B, EV/EBITDA, and market cap level
 key_data = extract_key_data(val,mcap, selected_ticker)
-st.subheader("Ticker: " + selected_ticker + ":" + str(name_dict.get(selected_ticker, "N/A")))
+st.subheader(selected_ticker + " - " + str(name_dict.get(selected_ticker, "N/A")))
 st.write(f"Data last updated: {formatted_date} (except for price chart - daily updated)")
 
 col1, col2, col3, col4 = st.columns(4)
