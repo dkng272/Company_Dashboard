@@ -4,12 +4,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from utils.utils import get_data_path
+from utils.mongodb_connection import get_stock_list
 
 #%% Data preparation
 @st.cache_data
 def load_sector_data():
-    # Import all L2
-    stock_set = pd.read_excel(get_data_path("STOCK LIST.xlsx"))
+    # Import all L2 from MongoDB
+    stock_set = get_stock_list()
     # Initialize an empty dictionary to store the classification.
     sector_dict = {}
     

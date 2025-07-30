@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
 from utils.utils import get_data_path
+from utils.mongodb_connection import get_tickers_names
 from datetime import datetime
 
 #%% Data preparation
@@ -15,7 +16,7 @@ def load_data():
     val = pd.read_csv(get_data_path("Val_processed.csv"))
     mcap = pd.read_csv(get_data_path("MktCap_processed.csv"))
     bank = pd.read_csv(get_data_path("BankSupp_processed.csv"))
-    names = pd.read_csv(get_data_path("Tickers_Names.csv"))
+    names = get_tickers_names()  # Now loading from MongoDB
     return df, val, mcap, bank, names
 
 df, val, mcap, bank, names = load_data()

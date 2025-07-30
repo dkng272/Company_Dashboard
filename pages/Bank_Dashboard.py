@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.utils import get_data_path
+from utils.mongodb_connection import get_bank_keycodes, get_bank_classification
 
 #%% Load bank data
 @st.cache_data
@@ -16,8 +17,8 @@ def load_bank_data():
 
 @st.cache_data
 def load_mapping_and_classification():
-    # Load keycode mapping
-    mapping = pd.read_excel(get_data_path("IRIS KeyCodes - Bank.xlsx"))
+    # Load keycode mapping from MongoDB
+    mapping = get_bank_keycodes()
     mapping = mapping[~(mapping['DWHCode'].isna())]
     mapping = mapping[['DWHCode', 'KeyCode','Name','Format']]
 
@@ -28,8 +29,8 @@ def load_mapping_and_classification():
     keycode_to_name_dict.pop("Dividend") # Remove Dividend as it is not used in the dashboard
     name_to_keycode_dict = {v: k for k, v in keycode_to_name_dict.items()}
 
-    # Load ticker classification
-    classification = pd.read_excel(get_data_path("Classification.xlsx"))
+    # Load ticker classification from MongoDB
+    classification = get_bank_classification()
     classification['GROUP'] = classification['GROUP'].astype(str)
     
     return ca_pct, keycode_to_name_dict, name_to_keycode_dict, classification
