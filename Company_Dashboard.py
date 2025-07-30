@@ -102,7 +102,7 @@ def create_FA_plots(df, ticker: str):
     ma = df_ticker[plot_cols].rolling(window=4, min_periods=1).mean()
     subplot_titles = [col.replace('_', ' ') for col in plot_cols]
     rows = (len(plot_cols) + 1) // 2
-    colors = ['royalblue', 'darkorange', 'green', 'red' ,'gray']
+    colors = ['royalblue', 'darkorange', 'green', 'maroon' ,'gray']
     return create_subplot_figure(df_ticker, plot_cols, ma, subplot_titles, "bn", "Income Statement Overview - " + ticker, rows, colors)
 
 def create_gr_plots(df, ticker: str):
