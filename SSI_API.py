@@ -117,7 +117,6 @@ def plot_ohlcv_candlestick(df, symbol, start_date = '2024-12-31'):
 #%% Putting it together
 ytd = datetime(datetime.today().year, 1, 1)
 
-@st.cache_data
 def load_ticker_price(ticker, start_date):
     """
     Load OHLCV data for a specific ticker.
