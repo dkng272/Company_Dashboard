@@ -4,3 +4,5 @@ plotly
 typing
 openpyxl
 requests
+pymongo
+python-dotenv
