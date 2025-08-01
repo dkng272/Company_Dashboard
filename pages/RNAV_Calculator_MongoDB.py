@@ -219,7 +219,7 @@ def main():
                             st.metric("NSA", f"{int(selected_project_data['net_sellable_area']):,} m²")
                         with col2:
                             st.metric("ASP", f"{int(selected_project_data['average_selling_price']/1_000_000):,}M VND/m²")
-                            st.metric("GFA", f"{int(selected_project_data['gross_floor_area']):,} m²")
+                            st.metric("Ownership", f"{selected_project_data['company_ownership'] * 100:.1f} %")
                         with col3:
                             st.metric("Land Area", f"{int(selected_project_data['land_area']):,} m²")
                             st.metric("Completion", f"{int(selected_project_data['project_completion_year'])}")
@@ -230,9 +230,9 @@ def main():
                             # Show RNAV if available
                             if 'rnav_value' in selected_project_data and selected_project_data['rnav_value']:
                                 rnav_formatted = format_vnd_billions(selected_project_data['rnav_value'])
-                                st.metric("🏆 Stored RNAV", rnav_formatted)
+                                st.metric("Stored RNAV", rnav_formatted)
                             else:
-                                st.metric("🏆 RNAV Status", "Not calculated")
+                                st.metric("RNAV Status", "Not calculated")
                         
                         # Override preload_data with database data
                         preload_data = selected_project_data
@@ -489,7 +489,19 @@ def main():
             st.caption(f"📊 From database: **{preload_data['location']}**")
         else:
             st.caption("💡 Enter project location for better documentation")
-               
+
+        # Add project ownership input field
+        project_ownership = st.text_input(
+            "Project Ownership",
+            value=preload_data.get('project_ownership', '') if preload_data else '',
+            placeholder="Enter project ownership (e.g., 100% or 75%)",
+            key="ownership"
+        )
+        if preload_data and 'project_ownership' in preload_data and preload_data['project_ownership']:
+            st.caption(f"📊 From database: **{preload_data['project_ownership']}**")
+        else:
+            st.caption("💡 Enter project ownership for better documentation")
+
         # Total Units
         ai_total_units = project_info.get('total_units') if project_info else None
         total_units = st.number_input(
@@ -920,6 +932,7 @@ def main():
                     'company_ticker': company_ticker,
                     'company_name': company_name,
                     'location': location,  # Include location in saved data
+                    'project_ownership': ownership,  # Include ownership in saved data
                     'total_units': total_units,
                     'average_unit_size': average_unit_size,
                     'average_selling_price': asp,
@@ -1201,6 +1214,7 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Current RNAV", format_vnd_billions(display_rnav_value))
+            st.metric("Current RNAV to Company", format_vnd_billions(display_rnav_value * project_ownership))
             st.metric("Total Revenue", format_vnd_billions(total_revenue))
             st.metric("Total PAT", format_vnd_billions(total_estimated_PAT))
         with col2:
@@ -1208,6 +1222,11 @@ def main():
                 "Stored RNAV", 
                 format_vnd_billions(stored_rnav),
                 delta=format_vnd_billions(display_rnav_value - stored_rnav)
+            )
+            st.metric(
+                "Stored RNAV to Company", 
+                format_vnd_billions(stored_rnav * project_ownership),
+                delta=format_vnd_billions(display_rnav_value * project_ownership - stored_rnav * project_ownership)
             )
             # Show stored total revenue and PAT if available
             if 'total_revenue' in selected_project_data:
