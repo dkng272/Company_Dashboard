@@ -497,6 +497,8 @@ def main():
             value=float(preload_data.get('project_ownership', 1.0)) if preload_data and 'project_ownership' in preload_data else 1.0, 
             step=0.01
         )
+        if preload_data and 'project_ownership' in preload_data:
+            st.caption(f"📊 From database: **{float(preload_data['project_ownership']) * 100:.1f} %** ownership")
 
         # Total Units
         ai_total_units = project_info.get('total_units') if project_info else None
