@@ -240,6 +240,7 @@ def save_project_to_mongodb(project_data, project_name, rnav_value=None):
             "company_ticker": project_data.get('company_ticker', 'MANUAL'),
             "company_name": project_data.get('company_name', 'Manual Entry'),
             "location": project_data.get('location', ''),  # Include location field
+            "project_ownership": project_data.get('project_ownership', 1.0),  # New field for project ownership
             "total_units": project_data.get('total_units', 0),
             "net_sellable_area": project_data.get('total_units', 0) * project_data.get('average_unit_size', 0),
             "average_unit_size": project_data.get('average_unit_size', 0),
