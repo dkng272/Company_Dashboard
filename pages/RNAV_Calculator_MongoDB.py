@@ -494,7 +494,7 @@ def main():
         project_ownership = st.number_input(
             "Project Ownership (enter 1 for 100% ownership)", 
             min_value=0.0, 
-            value=float(preload_data.get('project_ownership', 1)) if preload_data and 'project_ownership' in preload_data else 1, 
+            value=float(preload_data.get('project_ownership', 1.0)) if preload_data and 'project_ownership' in preload_data else 1.0, 
             step=0.01
         )
 
