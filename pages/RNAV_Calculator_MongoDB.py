@@ -219,7 +219,7 @@ def main():
                             st.metric("NSA", f"{int(selected_project_data['net_sellable_area']):,} m²")
                         with col2:
                             st.metric("ASP", f"{int(selected_project_data['average_selling_price']/1_000_000):,}M VND/m²")
-                            #st.metric("Ownership", f"{selected_project_data['project_ownership'] * 100:.1f} %")
+                            st.metric("Project Ownership", f"{float(selected_project_data['project_ownership']) * 100:.1f} %")
                         with col3:
                             st.metric("Land Area", f"{int(selected_project_data['land_area']):,} m²")
                             st.metric("Completion", f"{int(selected_project_data['project_completion_year'])}")
@@ -491,16 +491,12 @@ def main():
             st.caption("💡 Enter project location for better documentation")
 
         # Add project ownership input field
-        project_ownership = st.text_input(
-            "Project Ownership",
-            value=preload_data.get('project_ownership', '') if preload_data else '',
-            placeholder="Enter project ownership (e.g., 100% or 75%)",
-            key="ownership"
+        project_ownership = st.number_input(
+            "Project Ownership (enter 1 for 100% ownership)", 
+            min_value=0.0, 
+            value=float(preload_data.get('project_ownership', 1)) if preload_data and 'project_ownership' in preload_data else 1, 
+            step=0.01
         )
-        if preload_data and 'project_ownership' in preload_data and preload_data['project_ownership']:
-            st.caption(f"📊 From database: **{preload_data['project_ownership']}**")
-        else:
-            st.caption("💡 Enter project ownership for better documentation")
 
         # Total Units
         ai_total_units = project_info.get('total_units') if project_info else None
