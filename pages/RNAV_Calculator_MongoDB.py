@@ -219,7 +219,7 @@ def main():
                             st.metric("NSA", f"{int(selected_project_data['net_sellable_area']):,} m²")
                         with col2:
                             st.metric("ASP", f"{int(selected_project_data['average_selling_price']/1_000_000):,}M VND/m²")
-                            st.metric("Ownership", f"{selected_project_data['project_ownership'] * 100:.1f} %")
+                            #st.metric("Ownership", f"{selected_project_data['project_ownership'] * 100:.1f} %")
                         with col3:
                             st.metric("Land Area", f"{int(selected_project_data['land_area']):,} m²")
                             st.metric("Completion", f"{int(selected_project_data['project_completion_year'])}")
